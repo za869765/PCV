@@ -1364,6 +1364,28 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     display: none;
 }
 
+/* 聚焦模式：任一格展開時 → 其他格縮成只剩標題列，展開格吃滿剩餘全螢幕 */
+#exportBody.focus {
+    display: flex;
+    flex-direction: column;
+}
+
+#exportBody.focus .exp-sec:not(.open) {
+    flex: 0 0 auto;
+    overflow: hidden;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+#exportBody.focus .exp-sec:not(.open) .exp-sum {
+    display: none;   /* 只剩標題 */
+}
+
+#exportBody.focus .exp-sec.open {
+    flex: 1;
+    min-height: 0;
+}
+
 @media (max-width: 1100px) {
     #exportBody {
         grid-template-columns: 1fr;
@@ -2010,7 +2032,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v4.7</div>
+    <div class="version-tag">v4.8</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2758,6 +2780,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 var el = document.querySelector('#exportBody .exp-sec.' + (expOpenSec === 'common' ? 'common' : expOpenSec) + ':not(.empty)');
                 if (el) el.classList.add('open');
             }
+            // 聚焦模式：有展開格→其他縮成標題列、展開格吃滿全螢幕；無→回 2×2
+            var eb = document.getElementById('exportBody');
+            if (eb) eb.classList.toggle('focus', !!expOpenSec);
         }
 
         // 特殊身分別（個別拉選）人員列 — 列印視窗/一鍵列印附頁/寄信共用
