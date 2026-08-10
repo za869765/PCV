@@ -401,8 +401,15 @@ h1::after {
     display: none;
 }
 
+.big-button.export-button {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    color: white;
+    display: none;
+}
+
 .big-button.print-button[style*="inline-block"],
-.big-button.send-button[style*="inline-block"] {
+.big-button.send-button[style*="inline-block"],
+.big-button.export-button[style*="inline-block"] {
     animation: actionBtnIn 0.55s var(--ease-out-back) both;
 }
 
@@ -1549,6 +1556,7 @@ h1                { animation-delay: 0.05s; }
             <div class="button-group">
                 <button type="button" class="big-button print-button" id="printButton" onclick="printPage()">一鍵列印</button>
                 <button type="button" class="big-button send-button" id="sendButton" onclick="showSendModal()">寄給承辦</button>
+                <button type="button" class="big-button export-button" id="exportButton" data-tip="把 HIS 檔中 NIIS 名單沒有的人&#10;產成媒體資料上傳檔（Big5 CSV）&#10;可直接匯入 NIIS" onclick="openExport()">產 NIIS 匯入檔</button>
             </div>
         </form>
 
@@ -1637,6 +1645,24 @@ h1                { animation-delay: 0.05s; }
         </div>
     </div>
 
+    <!-- 產 NIIS 匯入檔 Modal -->
+    <div id="exportModal" class="custom-modal-overlay">
+        <div class="custom-modal-container" style="max-width: 860px; width: 95%;">
+            <div class="custom-modal-header">
+                <h2>📤 產 NIIS 匯入檔</h2>
+                <button class="custom-modal-close" onclick="closeExport()">&times;</button>
+            </div>
+            <div class="custom-modal-body">
+                <div id="exportBody"></div>
+            </div>
+            <div class="custom-modal-footer">
+                <button class="modal-btn modal-btn-secondary" onclick="closeExport()">取消</button>
+                <button class="modal-btn modal-btn-secondary" data-tip="只儲存針劑/代號/機構設定&#10;不產生檔案" onclick="saveExportConfigOnly()">儲存設定</button>
+                <button class="modal-btn modal-btn-primary" data-tip="產生媒體資料上傳檔（Big5 CSV）並下載&#10;同時儲存目前設定供下次使用" onclick="generateNiisFile()">產生並下載</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 自訂確認彈窗（取代瀏覽器原生 confirm） -->
     <div id="confirmModal" class="fx-overlay">
         <div class="fx-card" style="max-width: 440px;">
@@ -1666,7 +1692,7 @@ h1                { animation-delay: 0.05s; }
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v3.6</div>
+    <div class="version-tag">v3.7</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -1812,6 +1838,7 @@ h1                { animation-delay: 0.05s; }
                 phisFiles[slot] = file;
                 document.getElementById('phisCard_' + slot).classList.add('attached');
                 document.getElementById('phisName_' + slot).textContent = file.name;
+                updateExportButton();
                 if (currentFile) {
                     startStatistics(currentFile);  // 立即重新統計＋加計
                 } else {
@@ -1827,7 +1854,348 @@ h1                { animation-delay: 0.05s; }
             phisFiles[slot] = null;
             document.getElementById('phisCard_' + slot).classList.remove('attached');
             document.getElementById('phisName_' + slot).textContent = '';
+            updateExportButton();
             if (currentFile) startStatistics(currentFile);
+        }
+
+        function updateExportButton() {
+            document.getElementById('exportButton').style.display =
+                (phisFiles.k || phisFiles.z || phisFiles.v) ? 'inline-block' : 'none';
+        }
+
+        /* ===== 產 NIIS 匯入檔（v3.7） ===== */
+        var exportConfig = null;
+        var SLOT_FAMILY = { k: 'corona', z: 'flu', v: 'lung' };
+
+        // 預設接種日期：今天或過去最近的禮拜四（民國 7 碼）
+        function defaultRocDate() {
+            var d = new Date();
+            var diff = (d.getDay() - 4 + 7) % 7;   // 4 = 星期四
+            d.setDate(d.getDate() - diff);
+            var y = d.getFullYear() - 1911;
+            return String(y) + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2);
+        }
+
+        function openExport() {
+            if (!phisFiles.k && !phisFiles.z && !phisFiles.v) {
+                showFx('error', '尚未夾帶 HIS 檔', '請先夾帶 6K/6Z/6V 掛號檔', 2600);
+                return;
+            }
+            document.getElementById('exportModal').classList.add('show');
+            document.getElementById('exportBody').innerHTML =
+                '<div class="empty-state"><div class="hourglass-loader"></div>' +
+                '<div class="empty-state-text pulse-effect">載入設定中<span class="loading-dots"></span></div></div>';
+            google.script.run
+                .withSuccessHandler(function(cfg) {
+                    exportConfig = cfg || { org: '', idCodes: {}, batches: [], lastPick: {} };
+                    renderExport();
+                })
+                .withFailureHandler(function(err) {
+                    closeExport();
+                    showFx('error', '無法載入設定', (err && err.message) || String(err), 3200);
+                })
+                .getNiisExportConfig();
+        }
+
+        function closeExport() {
+            document.getElementById('exportModal').classList.remove('show');
+        }
+
+        function batchLabel(b) {
+            var extra = [];
+            if (b.exp) extra.push('效期 ' + b.exp);
+            if (b.qty !== '' && b.qty != null) extra.push('存 ' + b.qty);
+            return b.type + '｜' + b.lot + (extra.length ? '（' + extra.join('・') + '）' : '');
+        }
+
+        function renderExport() {
+            var cfg = exportConfig;
+            var html = '';
+            html += '<div class="settings-help">' +
+                '對象：HIS 檔中 <b>NIIS 名單沒有</b> 的人（已在 NIIS 者自動略過）。' +
+                '身分別：新冠/流感用下方代號自動填（HIS 檔內有「NIIS身分別」值的人優先用檔內值）；<b>肺鏈免填</b>。<br>' +
+                '針劑清單可直接<b>匯入結存量檔</b>（NIIS 匯出的 .xls，可一次多選），自動歸類記憶，下次直接下拉選。</div>';
+
+            // 結存量匯入
+            html += '<div class="settings-row"><div class="settings-row-head" style="align-items:flex-end;">';
+            html += '<div class="s-field s-field-grow" data-tip="NIIS 系統匯出的結存量檔（.xls）&#10;可一次選多個（各疫苗一檔）&#10;解析出疫苗種類代號＋批號＋效期＋結存量&#10;並依疫苗辨識設定自動歸到新冠/流感/肺鏈"><span class="s-cap">匯入結存量檔（可多選）</span>';
+            html += '<input class="s-input" type="file" id="expStockFiles" accept=".xls,.xlsx,.csv" multiple></div>';
+            html += '<button type="button" class="s-btn s-copy" onclick="importStockFiles()">解析並加入</button>';
+            html += '</div><div id="expStockMsg" style="font-size:12.5px;color:#27ae60;margin-top:4px;"></div></div>';
+
+            // 共用設定
+            html += '<div class="settings-row"><div class="settings-row-head" style="align-items:flex-end;">';
+            html += '<div class="s-field" data-tip="NIIS 接種機構代碼&#10;佳里區衛生所＝2341050013"><span class="s-cap">接種機構代碼</span><input class="s-input" id="expOrg" style="width:130px;" value="' + escAttr(cfg.org || '') + '"></div>';
+            html += '<div class="s-field" data-tip="民國 7 碼&#10;預設＝今天或過去最近的禮拜四"><span class="s-cap">接種日期</span><input class="s-input" id="expDate" style="width:110px;" value="' + escAttr(cfg._uiDate || defaultRocDate()) + '"></div>';
+            html += '<div class="s-field" data-tip="新冠身分別代號（如 C11）&#10;會自動填入匯入檔身分別欄"><span class="s-cap">新冠身分別代號</span><input class="s-input" id="expIdCorona" style="width:110px;" value="' + escAttr((cfg.idCodes || {}).corona || '') + '" placeholder="C11"></div>';
+            html += '<div class="s-field" data-tip="流感身分別代號（如 F03A）&#10;會自動填入匯入檔身分別欄"><span class="s-cap">流感身分別代號</span><input class="s-input" id="expIdFlu" style="width:110px;" value="' + escAttr((cfg.idCodes || {}).flu || '') + '" placeholder="F03A"></div>';
+            html += '</div></div>';
+
+            // 各 HIS 檔針劑選擇
+            var slots = ['k', 'z', 'v'];
+            for (var si = 0; si < slots.length; si++) {
+                var slot = slots[si];
+                if (!phisFiles[slot]) continue;
+                var fam = SLOT_FAMILY[slot];
+                html += '<div class="settings-row">';
+                html += '<div style="font-weight:600;margin-bottom:8px;">HIS ' + PHIS_META[slot].label + '｜' + escAttr(phisFiles[slot].name) + '</div>';
+                html += '<div class="settings-row-head" style="align-items:flex-end;">';
+                html += '<div class="s-field s-field-grow" data-tip="批次拉選：從記憶的針劑清單選擇&#10;（結存量匯入或手動新增皆會列入）"><span class="s-cap">針劑（疫苗種類｜批號）</span>';
+                html += '<select class="s-input" id="expBatch_' + slot + '">';
+                html += '<option value="-1">— 請選擇 —</option>';
+                var lastKey = (cfg.lastPick || {})[slot] || '';
+                var candidates = 0, lastIdx = -1, onlyIdx = -1;
+                for (var bi = 0; bi < cfg.batches.length; bi++) {
+                    var b = cfg.batches[bi];
+                    if (b.family && b.family !== fam) continue;
+                    candidates++;
+                    if (onlyIdx === -1) onlyIdx = bi;
+                    if (b.type + '|' + b.lot === lastKey) lastIdx = bi;
+                    html += '<option value="' + bi + '">' + escAttr(batchLabel(b)) + '</option>';
+                }
+                html += '</select></div>';
+                html += '<div class="s-field" data-tip="此檔的預設劑別&#10;HIS 檔內「疫苗劑別」欄有值的人優先用檔內值"><span class="s-cap">預設劑別</span><input class="s-input" id="expDose_' + slot + '" style="width:64px;text-align:center;" value="' + escAttr((cfg._uiDose || {})[slot] || '1') + '"></div>';
+                html += '<button type="button" class="s-btn s-del" data-tip="從記憶清單移除目前選中的針劑" onclick="removeBatch(\'' + slot + '\')">刪除</button>';
+                html += '</div>';
+                html += '<div class="settings-row-head" style="align-items:flex-end;margin-top:6px;margin-bottom:0;">';
+                html += '<div class="s-field" style="flex:1;min-width:150px;"><span class="s-cap">手動新增：疫苗種類代號</span><input class="s-input" id="expNewType_' + slot + '" placeholder="例：CoV_Moderna_LP"></div>';
+                html += '<div class="s-field" style="flex:1;min-width:150px;"><span class="s-cap">批號</span><input class="s-input" id="expNewLot_' + slot + '" placeholder="例：3053857_1150826-CDC"></div>';
+                html += '<button type="button" class="s-btn s-copy" onclick="addManualBatch(\'' + slot + '\')">加入</button>';
+                html += '</div>';
+                html += '</div>';
+            }
+            document.getElementById('exportBody').innerHTML = html;
+
+            // 預選：上次選過的優先，否則清單只有一支時自動選
+            for (var sj = 0; sj < slots.length; sj++) {
+                var slot2 = slots[sj];
+                var sel = document.getElementById('expBatch_' + slot2);
+                if (!sel) continue;
+                var fam2 = SLOT_FAMILY[slot2];
+                var lastKey2 = (exportConfig.lastPick || {})[slot2] || '';
+                var pickIdx = -1, cand = [];
+                for (var bj = 0; bj < exportConfig.batches.length; bj++) {
+                    var b2 = exportConfig.batches[bj];
+                    if (b2.family && b2.family !== fam2) continue;
+                    cand.push(bj);
+                    if (b2.type + '|' + b2.lot === lastKey2) pickIdx = bj;
+                }
+                if (pickIdx === -1 && cand.length === 1) pickIdx = cand[0];
+                if (pickIdx >= 0) sel.value = String(pickIdx);
+            }
+        }
+
+        // 讀回畫面輸入值 → exportConfig ＋ 回傳 picks（給 buildNiisExport）
+        function collectExportInputs() {
+            var cfg = exportConfig;
+            var orgEl = document.getElementById('expOrg');
+            if (!orgEl) return null;
+            cfg.org = orgEl.value.trim();
+            cfg.idCodes = {
+                corona: document.getElementById('expIdCorona').value.trim().toUpperCase(),
+                flu: document.getElementById('expIdFlu').value.trim().toUpperCase()
+            };
+            cfg._uiDate = document.getElementById('expDate').value.trim();   // 畫面暫存，重畫不重設
+            var picks = { slots: {}, idCodes: cfg.idCodes, org: cfg.org, date: cfg._uiDate };
+            var slots = ['k', 'z', 'v'];
+            cfg.lastPick = cfg.lastPick || {};
+            cfg._uiDose = cfg._uiDose || {};
+            for (var i = 0; i < slots.length; i++) {
+                var slot = slots[i];
+                var sel = document.getElementById('expBatch_' + slot);
+                if (!sel) continue;
+                var doseVal = (document.getElementById('expDose_' + slot).value || '').trim();
+                cfg._uiDose[slot] = doseVal;
+                var idx = parseInt(sel.value, 10);
+                if (idx >= 0 && cfg.batches[idx]) {
+                    var b = cfg.batches[idx];
+                    picks.slots[slot] = { type: b.type, lot: b.lot, dose: doseVal };
+                    cfg.lastPick[slot] = b.type + '|' + b.lot;
+                } else {
+                    delete cfg.lastPick[slot];   // 選「請選擇」時清除記憶，避免下次自動跳回
+                }
+            }
+            return picks;
+        }
+
+        function addManualBatch(slot) {
+            collectExportInputs();
+            var t = document.getElementById('expNewType_' + slot).value.trim();
+            var l = document.getElementById('expNewLot_' + slot).value.trim();
+            if (!t || !l) { showModal('疫苗種類代號與批號都要填！'); return; }
+            exportConfig.batches.push({ type: t, lot: l, exp: '', qty: '', family: SLOT_FAMILY[slot] });
+            exportConfig.lastPick = exportConfig.lastPick || {};
+            exportConfig.lastPick[slot] = t + '|' + l;
+            renderExport();
+        }
+
+        function removeBatch(slot) {
+            collectExportInputs();
+            var sel = document.getElementById('expBatch_' + slot);
+            var idx = parseInt(sel.value, 10);
+            if (!(idx >= 0) || !exportConfig.batches[idx]) { showModal('請先選擇要刪除的針劑！'); return; }
+            var b = exportConfig.batches[idx];
+            showConfirm('刪除針劑', '確定從記憶清單移除「' + b.type + '｜' + b.lot + '」？', function() {
+                var key = b.type + '|' + b.lot;
+                exportConfig.batches.splice(idx, 1);
+                ['k', 'z', 'v'].forEach(function(s) {
+                    if ((exportConfig.lastPick || {})[s] === key) delete exportConfig.lastPick[s];
+                });
+                renderExport();
+            }, '🗑️');
+        }
+
+        /* 結存量檔解析（SheetJS 延遲載入） */
+        function ensureXLSX() {
+            return new Promise(function(resolve, reject) {
+                if (window.XLSX) return resolve();
+                var s = document.createElement('script');
+                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+                s.onload = function() { resolve(); };
+                s.onerror = function() { reject(new Error('無法載入 XLS 解析器，請檢查網路後重試')); };
+                document.head.appendChild(s);
+            });
+        }
+
+        function parseStockRows(rows) {
+            // 找表頭列（含 疫苗名稱＋疫苗批號），再取各欄位
+            var entries = [];
+            var hIdx = -1, cType = -1, cLot = -1, cExp = -1, cQty = -1;
+            for (var r = 0; r < Math.min(rows.length, 10); r++) {
+                var row = rows[r] || [];
+                for (var c = 0; c < row.length; c++) {
+                    var v = String(row[c] == null ? '' : row[c]);
+                    if (v.indexOf('疫苗名稱') !== -1) { hIdx = r; cType = c; }
+                    if (v.indexOf('疫苗批號') !== -1) cLot = c;
+                    if (v.indexOf('有效期限') !== -1) cExp = c;
+                    if (v.indexOf('期間後結存') !== -1) cQty = c;
+                }
+                if (hIdx >= 0) break;
+            }
+            if (hIdx < 0 || cLot < 0) return entries;
+            for (var r2 = hIdx + 1; r2 < rows.length; r2++) {
+                var row2 = rows[r2] || [];
+                var t = String(row2[cType] == null ? '' : row2[cType]).trim();
+                var l = String(row2[cLot] == null ? '' : row2[cLot]).trim();
+                if (!t || !l) continue;
+                entries.push({
+                    type: t, lot: l,
+                    exp: cExp >= 0 ? String(row2[cExp] == null ? '' : row2[cExp]).trim() : '',
+                    qty: cQty >= 0 ? String(row2[cQty] == null ? '' : row2[cQty]).trim() : ''
+                });
+            }
+            return entries;
+        }
+
+        function importStockFiles() {
+            var input = document.getElementById('expStockFiles');
+            var files = Array.prototype.slice.call(input.files || []);
+            if (files.length === 0) { showModal('請先選擇結存量檔（.xls）！'); return; }
+            collectExportInputs();
+            var msg = document.getElementById('expStockMsg');
+            msg.textContent = '解析中…';
+            ensureXLSX().then(function() {
+                return Promise.all(files.map(function(f) {
+                    return new Promise(function(resolve) {
+                        var reader = new FileReader();
+                        reader.onload = function(e) {
+                            try {
+                                var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                                var ws = wb.Sheets[wb.SheetNames[0]];
+                                resolve(parseStockRows(XLSX.utils.sheet_to_json(ws, { header: 1 })));
+                            } catch (err) { resolve([]); }
+                        };
+                        reader.onerror = function() { resolve([]); };
+                        reader.readAsArrayBuffer(f);
+                    });
+                }));
+            }).then(function(lists) {
+                var entries = [];
+                lists.forEach(function(l) { entries = entries.concat(l); });
+                if (entries.length === 0) {
+                    msg.textContent = '';
+                    showModal('解析不到針劑資料，請確認是 NIIS 匯出的結存量檔！');
+                    return;
+                }
+                google.script.run
+                    .withSuccessHandler(function(res) {
+                        if (res && res.success) {
+                            exportConfig = res.config;
+                            renderExport();
+                            document.getElementById('expStockMsg').textContent =
+                                '✔ 已加入 ' + res.added + ' 筆、更新 ' + res.updated + ' 筆（已存雲端，下次直接拉選）';
+                        } else {
+                            showFx('error', '匯入失敗', (res && res.error) || '未知錯誤', 3600);
+                        }
+                    })
+                    .withFailureHandler(function(err) {
+                        showFx('error', '匯入失敗', (err && err.message) || String(err), 3600);
+                    })
+                    .importNiisBatches(entries, exportConfig);
+            }).catch(function(err) {
+                msg.textContent = '';
+                showFx('error', '解析失敗', String(err && err.message || err), 3600);
+            });
+        }
+
+        function saveExportConfigOnly() {
+            collectExportInputs();
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res && res.success) {
+                        exportConfig = res.config;
+                        showFx('success', '設定已儲存', '針劑清單與代號已存雲端（全所共用）', 2200);
+                    } else showFx('error', '儲存失敗', (res && res.error) || '未知錯誤', 3200);
+                })
+                .withFailureHandler(function(err) { showFx('error', '儲存失敗', String(err), 3200); })
+                .saveNiisExportConfig(exportConfig);
+        }
+
+        function downloadB64(fileName, b64) {
+            var bin = atob(b64);
+            var bytes = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            var blob = new Blob([bytes], { type: 'text/csv' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function() { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+        }
+
+        function generateNiisFile() {
+            var picks = collectExportInputs();
+            if (!picks) return;
+            if (!/^\d{7}$/.test(picks.date)) {
+                showModal('接種日期請填民國 7 碼（如 1150806）！');
+                return;
+            }
+            showFx('loading', '產檔中', '正在產生 NIIS 匯入檔（Big5）…');
+            var readAll = [currentFile ? readFileAsText(currentFile, 'big5') : Promise.resolve('')];
+            ['k', 'z', 'v'].forEach(function(slot) {
+                readAll.push(phisFiles[slot] ? readFileAsText(phisFiles[slot], 'big5') : Promise.resolve(''));
+            });
+            Promise.all(readAll).then(function(contents) {
+                google.script.run
+                    .withSuccessHandler(function(res) {
+                        if (res && res.errorMessage) {
+                            showFx('error', '無法產檔', res.errorMessage, 3600);
+                            return;
+                        }
+                        downloadB64(res.fileName, res.base64);
+                        closeExport();
+                        showFx('success', '已產生 ' + res.count + ' 筆',
+                            res.fileName + (res.skipped ? '（略過已在 NIIS ' + res.skipped + ' 人）' : ''), 3200);
+                        google.script.run.saveNiisExportConfig(exportConfig);   // 靜默記憶設定
+                    })
+                    .withFailureHandler(function(err) {
+                        showFx('error', '產檔失敗', (err && err.message) || String(err), 3600);
+                    })
+                    .buildNiisExport({ k: contents[1], z: contents[2], v: contents[3] }, contents[0], picks);
+            }).catch(function(err) {
+                showFx('error', '讀取檔案失敗', String(err), 3200);
+            });
         }
 
         function resetResultArea() {

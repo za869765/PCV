@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v3.5)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v3.7)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -22,6 +22,11 @@
  *    名字旁備註 (HIS)，浮標顯示來源檔；同類別已在 NIIS 有針者不重複計
  *  - 加計群組：先以 HIS 檔「診斷代號/疫苗劑別」欄比對辨識代號（限同類別群組），
  *    辨識不到用該類別設定中的第一組；6Z 檔「NIIS身分別」欄一併帶入流感 F 分類
+ * v3.7 變更（產 NIIS 匯入檔）：
+ *  - 依媒體資料上傳範本（24 欄）產出 HIS 檔中 NIIS 名單沒有者的匯入 CSV（Big5）
+ *  - 身分別自動填：新冠/流感各一組預設代號（可記憶），HIS 檔內有值優先；肺鏈不填
+ *  - 針劑（疫苗種類代號＋批號）由使用者於面板新增，存 Script Properties 全所共用，
+ *    下次開啟直接下拉選（批次拉選）；接種機構代碼一併記憶
  */
 
 function doGet() {
@@ -273,13 +278,21 @@ function analyzeNIIS(jnContent, config) {
   };
 }
 
+// HIS 檔上傳槽定義（compareCSVFiles 加計與 buildNiisExport 共用）
+var PHIS_SLOTS = [
+  { slot: 'k', family: 'corona', expect: '6K' },
+  { slot: 'z', family: 'flu',    expect: '6Z' },
+  { slot: 'v', family: 'lung',   expect: '6V' }
+];
+
 // ===== HIS 掛號檔解析（v3.5 起） =====
 // 實測 HIS 匯出為 13 欄（身份證在第4欄、「優待別」欄標 6V/6k/6Z）；
 // 以表頭關鍵字偵測欄位，舊格式（A欄=身分證、B欄=姓名）也相容。
 function parsePhisList(content) {
   var rows = Utilities.parseCsv(content);
   var header = rows[0] || [];
-  var idCol = -1, nameCol = -1, birthCol = -1, typeCol = -1, diagCol = -1, doseCol = -1, identCol = -1;
+  var idCol = -1, nameCol = -1, birthCol = -1, typeCol = -1, diagCol = -1,
+      doseCol = -1, identCol = -1, sexCol = -1, phoneCol = -1, addrCol = -1;
   for (var c = 0; c < header.length; c++) {
     var h = String(header[c] || '');
     if (idCol === -1 && (h.indexOf('身份證') !== -1 || h.indexOf('身分證') !== -1)) idCol = c;
@@ -289,13 +302,20 @@ function parsePhisList(content) {
     if (diagCol === -1 && h.indexOf('診斷代號') !== -1) diagCol = c;
     if (doseCol === -1 && h.indexOf('疫苗劑別') !== -1) doseCol = c;
     if (identCol === -1 && (h.indexOf('身分別') !== -1 || h.indexOf('身份別') !== -1)) identCol = c;
+    if (sexCol === -1 && h.indexOf('性別') !== -1) sexCol = c;
+    if (phoneCol === -1 && h.indexOf('電話') !== -1) phoneCol = c;   // 第一個電話欄（電話1）
+    if (addrCol === -1 && h.indexOf('地址') !== -1) addrCol = c;
   }
   if (idCol === -1) { idCol = 0; if (nameCol === -1) nameCol = 1; }  // 無表頭關鍵字時回退舊格式
 
   var idNameMap = {};
   var idBirthMap = {};
   var idHintMap = {};    // 診斷代號＋疫苗劑別（供辨識加計群組）
-  var idIdentMap = {};   // NIIS身分別（流感 F 代碼）
+  var idIdentMap = {};   // NIIS身分別（身分別代碼）
+  var idSexMap = {};
+  var idPhoneMap = {};
+  var idAddrMap = {};
+  var idDoseMap = {};
   var typeValues = {};   // 出現過的優待別值（大寫 -> 原值），整欄掃描供驗證
   for (var i = 1; i < rows.length; i++) {
     var row = rows[i] || [];
@@ -316,13 +336,19 @@ function parsePhisList(content) {
       var ident = (row[identCol] || '').toString().trim();
       if (ident) idIdentMap[id] = ident.toUpperCase();
     }
+    if (sexCol >= 0 && !idSexMap[id]) idSexMap[id] = (row[sexCol] || '').toString().trim();
+    if (phoneCol >= 0 && !idPhoneMap[id]) idPhoneMap[id] = (row[phoneCol] || '').toString().trim();
+    if (addrCol >= 0 && !idAddrMap[id]) idAddrMap[id] = (row[addrCol] || '').toString().trim();
+    if (doseCol >= 0 && !idDoseMap[id]) idDoseMap[id] = (row[doseCol] || '').toString().trim();
     if (typeCol >= 0) {
       var tv = (row[typeCol] || '').toString().trim();
       if (tv) typeValues[tv.toUpperCase()] = tv;
     }
   }
   return { idNameMap: idNameMap, idBirthMap: idBirthMap, idHintMap: idHintMap,
-           idIdentMap: idIdentMap, typeValues: typeValues, hasTypeCol: typeCol >= 0 };
+           idIdentMap: idIdentMap, idSexMap: idSexMap, idPhoneMap: idPhoneMap,
+           idAddrMap: idAddrMap, idDoseMap: idDoseMap,
+           typeValues: typeValues, hasTypeCol: typeCol >= 0 };
 }
 
 // 流感疫苗接種計畫接種對象代碼對照表（附件14，2026-08 新標準）
@@ -349,6 +375,241 @@ var FLU_TARGET_NAMES = {
   F09:    '擴大對象'
 };
 
+// ===== 產 NIIS 匯入檔（v3.7） =====
+// 媒體資料上傳範本 24 欄表頭（NIIS 官方格式）
+var NIIS_EXPORT_HEADER = '幼兒身分證號,嬰幼兒姓名,嬰幼兒性別,(必填)幼兒出生日期,同胎次序,通訊地址,電話,父或母身分證號,(必填)接種機構,(必填)接種日期,(必填)疫苗種類,(必填)疫苗劑別,(必填)疫苗批號,疫苗廠商,(必填)疫苗型別,曾接種流感疫苗,身分別,接種站識別碼,期別,時段,醫師,接種位址,接種站名稱,處置費註記(非必填)';
+
+// 預設值取自 2026-08 實際匯入成功案例（C11＝新冠身分別；批號來自結存量檔）
+function getDefaultNiisExportConfig() {
+  return {
+    org: '2341050013',
+    idCodes: { corona: 'C11', flu: '' },
+    batches: [
+      { type: 'CoV_Moderna_LP', lot: '3053857_1150826-CDC', exp: '1150826', qty: '', family: 'corona' },
+      { type: '20PCV', lot: 'ND3093-CDC', exp: '1160430', qty: '', family: 'lung' },
+      { type: '20PCV', lot: 'NT3016-CDC', exp: '1161031', qty: '', family: 'lung' },
+      { type: '21PCV', lot: 'A007292-CDC', exp: '1170407', qty: '', family: 'lung' }
+    ],
+    lastPick: {}
+  };
+}
+
+function getNiisExportConfig() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty('niisExportConfig');
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (parsed && parsed.batches) return parsed;
+    }
+  } catch (e) {
+    // 設定損壞時回退預設
+  }
+  return getDefaultNiisExportConfig();
+}
+
+function cleanNiisExportConfig(cfg) {
+  cfg = cfg || {};
+  var clean = {
+    org: String(cfg.org || '').trim().slice(0, 20),
+    idCodes: {
+      corona: String((cfg.idCodes || {}).corona || '').trim().slice(0, 10).toUpperCase(),
+      flu: String((cfg.idCodes || {}).flu || '').trim().slice(0, 10).toUpperCase()
+    },
+    batches: [],
+    lastPick: {}
+  };
+  var list = cfg.batches || [];
+  var seen = {};
+  for (var i = 0; i < list.length && clean.batches.length < 100; i++) {
+    var b = list[i] || {};
+    var t = String(b.type || '').trim().slice(0, 40);
+    var l = String(b.lot || '').trim().slice(0, 40);
+    if (!t || !l || seen[t + '|' + l]) continue;
+    seen[t + '|' + l] = true;
+    clean.batches.push({
+      type: t, lot: l,
+      exp: String(b.exp || '').trim().slice(0, 10),
+      qty: String(b.qty || '').trim().slice(0, 10),
+      family: (b.family === 'corona' || b.family === 'flu' || b.family === 'lung') ? b.family : ''
+    });
+  }
+  var lp = cfg.lastPick || {};
+  var slots = ['k', 'z', 'v'];
+  for (var s = 0; s < slots.length; s++) {
+    if (lp[slots[s]]) clean.lastPick[slots[s]] = String(lp[slots[s]]).slice(0, 90);
+  }
+  return clean;
+}
+
+function saveNiisExportConfig(cfg) {
+  try {
+    var clean = cleanNiisExportConfig(cfg);
+    PropertiesService.getScriptProperties().setProperty('niisExportConfig', JSON.stringify(clean));
+    return { success: true, config: clean };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * 匯入結存量檔解析出的針劑清單（前端解析 XLS 後傳入 [{type, lot, exp, qty}]）
+ * 併入現有設定（同 種類+批號 視為同筆、更新效期/結存），依疫苗辨識設定自動歸類別。
+ */
+function importNiisBatches(entries, currentCfg) {
+  try {
+    var cfg = cleanNiisExportConfig(currentCfg || getNiisExportConfig());
+    var config = getVaccineConfigList();
+    var keyFam = {};
+    for (var g = 0; g < config.length; g++) keyFam[config[g].key] = config[g].family;
+
+    var byKey = {};
+    for (var i = 0; i < cfg.batches.length; i++) byKey[cfg.batches[i].type + '|' + cfg.batches[i].lot] = cfg.batches[i];
+
+    var added = 0, updated = 0;
+    entries = entries || [];
+    for (var e = 0; e < entries.length && e < 300; e++) {
+      var en = entries[e] || {};
+      var t = String(en.type || '').trim().slice(0, 40);
+      var l = String(en.lot || '').trim().slice(0, 40);
+      if (!t || !l) continue;
+      var exp = String(en.exp || '').trim().slice(0, 10);
+      var qty = String(en.qty == null ? '' : en.qty).trim().slice(0, 10);
+      var k = t + '|' + l;
+      if (byKey[k]) {
+        if (exp) byKey[k].exp = exp;
+        if (qty !== '') byKey[k].qty = qty;
+        updated++;
+      } else {
+        var gk = recognizeVaccineCategory(t, config);
+        var fam = gk ? (keyFam[gk] || '') : '';
+        var nb = { type: t, lot: l, exp: exp, qty: qty, family: fam };
+        cfg.batches.push(nb);
+        byKey[k] = nb;
+        added++;
+      }
+    }
+    var saved = saveNiisExportConfig(cfg);
+    if (!saved.success) return saved;
+    return { success: true, config: saved.config, added: added, updated: updated };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+function csvField(v) {
+  v = (v == null ? '' : String(v));
+  return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+
+/**
+ * 產 NIIS 匯入檔：HIS 檔中 NIIS 名單沒有的人 → 媒體上傳格式 CSV（Big5）
+ * picks = { slots: { k/z/v: { type, lot, dose } }, idCodes: { corona, flu }, org, date }
+ * 身分別：HIS 檔內「NIIS身分別」值優先，否則新冠/流感用預設代號；肺鏈不填。
+ */
+function buildNiisExport(phisFiles, jnContent, picks) {
+  try {
+    phisFiles = phisFiles || {};
+    picks = picks || {};
+    var slotPicks = picks.slots || {};
+    var idCodes = picks.idCodes || {};
+    var org = String(picks.org || '').trim();
+    var date = String(picks.date || '').trim();
+    if (!org) return { errorMessage: '請填接種機構代碼！' };
+    if (!/^\d{7}$/.test(date)) return { errorMessage: '接種日期格式錯誤，請填民國 7 碼（如 1150810）！' };
+
+    var config = getVaccineConfigList();
+    var keyFam = {};
+    for (var g = 0; g < config.length; g++) keyFam[config[g].key] = config[g].family;
+
+    // NIIS 名單各類別集合（已在 NIIS 的人不匯出）
+    var niisFam = { corona: {}, flu: {}, lung: {} };
+    if (jnContent) {
+      var data = analyzeNIIS(jnContent, config);
+      for (var nid in data.idCategoryCount) {
+        for (var nk in data.idCategoryCount[nid]) {
+          var fam = keyFam[nk];
+          if (fam) niisFam[fam][nid] = true;
+        }
+      }
+    }
+
+    var lines = [NIIS_EXPORT_HEADER];
+    var count = 0, skipped = 0;
+    var exported = [];   // {name, slot} 供前端顯示
+    for (var s = 0; s < PHIS_SLOTS.length; s++) {
+      var def = PHIS_SLOTS[s];
+      var content = phisFiles[def.slot];
+      if (!content) continue;
+      var parsed = parsePhisList(content);
+      if (parsed.hasTypeCol) {
+        for (var tvk in parsed.typeValues) {
+          if (tvk !== def.expect) {
+            return { errorMessage: 'HIS ' + def.expect + ' 檔案錯誤：優待別欄出現「' + parsed.typeValues[tvk] + '」！' };
+          }
+        }
+      }
+      var ids = Object.keys(parsed.idNameMap).sort(function(a, b) {
+        return (parsed.idNameMap[a] || '').localeCompare(parsed.idNameMap[b] || '', 'zh-Hant');
+      });
+      var pick = slotPicks[def.slot] || {};
+      var slotDose = String(pick.dose || '').trim();
+      var slotRows = [];
+      for (var i = 0; i < ids.length; i++) {
+        var pid = ids[i];
+        if (niisFam[def.family][pid]) { skipped++; continue; }
+        var identity = '';
+        if (def.family === 'corona') identity = parsed.idIdentMap[pid] || idCodes.corona || '';
+        else if (def.family === 'flu') identity = parsed.idIdentMap[pid] || idCodes.flu || '';
+        // 肺鏈不填身分別
+        var sex = parsed.idSexMap[pid] || '';
+        sex = sex.indexOf('男') !== -1 ? 'M' : (sex.indexOf('女') !== -1 ? 'F' : sex);
+        var birth = (parsed.idBirthMap[pid] || '').replace(/^0+/, '');   // 民國前置 0 去除（0480327→480327）
+        var dose = String(parsed.idDoseMap[pid] || '').trim() || slotDose || '1';
+        slotRows.push([
+          pid, parsed.idNameMap[pid] || '', sex, birth, '1',
+          parsed.idAddrMap[pid] || '', parsed.idPhoneMap[pid] || '', '',
+          org, date, pick.type || '', dose, pick.lot || '', '', '1', '',
+          identity, '', '', '', '', '', '', ''
+        ]);
+        exported.push({ name: parsed.idNameMap[pid] || pid, slot: def.expect });
+      }
+      if (slotRows.length > 0) {
+        if (!pick.type || !pick.lot) {
+          return { errorMessage: 'HIS ' + def.expect + ' 有 ' + slotRows.length + ' 人待匯入，請先選擇針劑（疫苗種類＋批號）！' };
+        }
+        for (var r = 0; r < slotRows.length; r++) {
+          if (def.family !== 'lung' && !slotRows[r][16]) {
+            return { errorMessage: '請先填' + (def.family === 'corona' ? '新冠' : '流感') + '身分別代號（HIS 檔內無身分別值的人需要）！' };
+          }
+          var cells = [];
+          for (var c = 0; c < slotRows[r].length; c++) cells.push(csvField(slotRows[r][c]));
+          lines.push(cells.join(','));
+        }
+        count += slotRows.length;
+      }
+    }
+
+    if (count === 0) {
+      return { errorMessage: skipped > 0
+        ? 'HIS 檔中 ' + skipped + ' 人都已在 NIIS 名單，沒有需要匯入的人！'
+        : 'HIS 檔中沒有可匯出的資料！' };
+    }
+
+    var csv = lines.join('\r\n') + '\r\n';
+    var fileName = 'NIIS匯入_' + date + '.csv';
+    var blob = Utilities.newBlob('', 'text/csv', fileName).setDataFromString(csv, 'Big5');
+    return {
+      fileName: fileName,
+      base64: Utilities.base64Encode(blob.getBytes()),
+      count: count,
+      skipped: skipped,
+      exported: exported
+    };
+  } catch (error) {
+    return { errorMessage: '產檔失敗：' + error.toString() };
+  }
+}
+
 /**
  * 主統計函數（v3.2：辨識規則由設定驅動；v3.6：HIS 掛號檔加計與流感 F 分類）
  * 回傳：
@@ -368,11 +629,6 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
 
   // ===== HIS 掛號檔（選傳）：解析＋優待別驗證 =====
   phisFiles = phisFiles || {};
-  var PHIS_SLOTS = [
-    { slot: 'k', family: 'corona', expect: '6K' },
-    { slot: 'z', family: 'flu',    expect: '6Z' },
-    { slot: 'v', family: 'lung',   expect: '6V' }
-  ];
   var phisParsed = {};   // slot -> parsePhisList 結果
   for (var p = 0; p < PHIS_SLOTS.length; p++) {
     var slotDef = PHIS_SLOTS[p];
