@@ -1692,7 +1692,7 @@ h1                { animation-delay: 0.05s; }
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v3.8</div>
+    <div class="version-tag">v3.9</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -1867,6 +1867,31 @@ h1                { animation-delay: 0.05s; }
         var exportConfig = null;
         var SLOT_FAMILY = { k: 'corona', z: 'flu', v: 'lung' };
 
+        // 附件14 流感疫苗接種計畫接種對象代碼對照表
+        var FLU_CODE_OPTIONS = [
+            ['F01', '6個月以上至國小入學前幼兒'],
+            ['F02A01', '國小學童'],
+            ['F02A02', '國中生'],
+            ['F02A03', '高中/職、五專1-3年級學生'],
+            ['F02B', '幼兒園托育機構/居家托育人員'],
+            ['F03A', '滿50歲以上成人（所內/合約院所）'],
+            ['F03B', '滿50歲以上成人（社區/到宅）'],
+            ['F04A', '長照機構受照顧者'],
+            ['F04B', '長照機構直接照顧工作人員'],
+            ['F05A', '孕婦'],
+            ['F05B', '6個月內嬰兒之雙親/實際扶養者'],
+            ['F06A', '高風險慢性病患'],
+            ['F06B', '罕見疾病患者'],
+            ['F06C', '重大傷病患者'],
+            ['F07A', '具執業登記之醫事人員'],
+            ['F07B', '醫療院所非執登工作人員'],
+            ['F07C', '防疫相關人員'],
+            ['F07D', '禽畜養殖/動物防疫相關行業工作人員'],
+            ['F09', '擴大對象']
+        ];
+        var fluPersonList = [];    // 6Z 名單 [{id,name,birth}]
+        var fluPersonCodes = {};   // id -> 個別拉選的 F 代碼（跨重繪保留）
+
         // 預設接種日期：今天或過去最近的禮拜四（民國 7 碼）
         function defaultRocDate() {
             var d = new Date();
@@ -1929,8 +1954,16 @@ h1                { animation-delay: 0.05s; }
             html += '<div class="s-field" data-tip="NIIS 接種機構代碼&#10;佳里區衛生所＝2341050013"><span class="s-cap">接種機構代碼</span><input class="s-input" id="expOrg" style="width:130px;" value="' + escAttr(cfg.org || '') + '"></div>';
             html += '<div class="s-field" data-tip="民國 7 碼&#10;預設＝今天或過去最近的禮拜四"><span class="s-cap">接種日期</span><input class="s-input" id="expDate" style="width:110px;" value="' + escAttr(cfg._uiDate || defaultRocDate()) + '"></div>';
             html += '<div class="s-field" data-tip="新冠身分別＝系統依年齡自動判斷&#10;（接種年－出生年，只看年）&#10;此欄僅當 HIS 檔缺出生日期時備援使用"><span class="s-cap">新冠備援代號</span><input class="s-input" id="expIdCorona" style="width:110px;" value="' + escAttr((cfg.idCodes || {}).corona || '') + '" placeholder="自動依年齡"></div>';
-            html += '<div class="s-field" data-tip="流感身分別代號（如 F03A）&#10;會自動填入匯入檔身分別欄"><span class="s-cap">流感身分別代號</span><input class="s-input" id="expIdFlu" style="width:110px;" value="' + escAttr((cfg.idCodes || {}).flu || '') + '" placeholder="F03A"></div>';
+            html += '<div class="s-field" data-tip="流感預設身分別代號（如 F03A）&#10;下方名單未個別拉選的人用此預設&#10;個別拉選優先"><span class="s-cap">流感預設代號</span><input class="s-input" id="expIdFlu" style="width:110px;" value="' + escAttr((cfg.idCodes || {}).flu || '') + '" placeholder="F03A"></div>';
             html += '</div></div>';
+
+            // 流感名單：每人個別拉選身分別（附件14）
+            if (phisFiles.z) {
+                html += '<div class="settings-row">';
+                html += '<div style="font-weight:600;margin-bottom:8px;" data-tip="附件14 對象別代碼表&#10;每人可個別拉選；「（預設）」＝用上方流感預設代號&#10;已在 NIIS 名單者產檔時會自動略過">流感名單身分別（個別拉選）</div>';
+                html += '<div id="expFluList" style="max-height:220px;overflow-y:auto;">讀取名單中…</div>';
+                html += '</div>';
+            }
 
             // 各 HIS 檔針劑選擇
             var slots = ['k', 'z', 'v'];
@@ -1984,6 +2017,68 @@ h1                { animation-delay: 0.05s; }
                 if (pickIdx === -1 && cand.length === 1) pickIdx = cand[0];
                 if (pickIdx >= 0) sel.value = String(pickIdx);
             }
+
+            if (phisFiles.z) loadFluList();
+        }
+
+        // 解析 6Z 檔名單（前端，表頭偵測同後端）
+        function parseFluPersons(text) {
+            var rows = text.split(/\r?\n/).filter(function(l) { return l.trim(); }).map(splitCsvLine);
+            var header = rows[0] || [];
+            var idCol = -1, nameCol = -1, birthCol = -1;
+            for (var c = 0; c < header.length; c++) {
+                var h = header[c] || '';
+                if (idCol === -1 && (h.indexOf('身份證') !== -1 || h.indexOf('身分證') !== -1)) idCol = c;
+                if (nameCol === -1 && h.indexOf('姓名') !== -1) nameCol = c;
+                if (birthCol === -1 && h.indexOf('出生') !== -1) birthCol = c;
+            }
+            if (idCol === -1) { idCol = 0; if (nameCol === -1) nameCol = 1; }
+            var seen = {}, list = [];
+            for (var i = 1; i < rows.length; i++) {
+                var r = rows[i];
+                var id = (r[idCol] || '').trim().toUpperCase();
+                if (!id || seen[id]) continue;
+                seen[id] = true;
+                list.push({
+                    id: id,
+                    name: (nameCol >= 0 ? (r[nameCol] || '') : '').trim() || id,
+                    birth: birthCol >= 0 ? (r[birthCol] || '').trim() : ''
+                });
+            }
+            list.sort(function(a, b) { return a.name.localeCompare(b.name, 'zh-Hant'); });
+            return list;
+        }
+
+        function loadFluList() {
+            var box = document.getElementById('expFluList');
+            if (!box || !phisFiles.z) return;
+            readFileAsText(phisFiles.z, 'big5').then(function(text) {
+                fluPersonList = parseFluPersons(text);
+                if (fluPersonList.length === 0) { box.innerHTML = '<span style="color:#94a3b8;">6Z 檔中沒有名單資料</span>'; return; }
+                var opts = '<option value="">（預設）</option>';
+                for (var o = 0; o < FLU_CODE_OPTIONS.length; o++) {
+                    opts += '<option value="' + FLU_CODE_OPTIONS[o][0] + '">' + FLU_CODE_OPTIONS[o][0] + ' ' + FLU_CODE_OPTIONS[o][1] + '</option>';
+                }
+                var html = '';
+                for (var i = 0; i < fluPersonList.length; i++) {
+                    var p = fluPersonList[i];
+                    html += '<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px dashed #e2e8f0;">';
+                    html += '<span style="min-width:110px;font-weight:600;" data-tip="身分證：' + escAttr(p.id) + (p.birth ? '&#10;出生：' + escAttr(p.birth) : '') + '">' + escAttr(p.name) + '</span>';
+                    html += '<select class="s-input" id="expFluSel_' + i + '" style="flex:1;">' + opts + '</select>';
+                    html += '</div>';
+                }
+                box.innerHTML = html;
+                // 還原先前個別拉選
+                for (var j = 0; j < fluPersonList.length; j++) {
+                    var code = fluPersonCodes[fluPersonList[j].id];
+                    if (code) {
+                        var sel = document.getElementById('expFluSel_' + j);
+                        if (sel) sel.value = code;
+                    }
+                }
+            }).catch(function() {
+                box.innerHTML = '<span style="color:#e74c3c;">名單讀取失敗</span>';
+            });
         }
 
         // 讀回畫面輸入值 → exportConfig ＋ 回傳 picks（給 buildNiisExport）
@@ -1997,7 +2092,15 @@ h1                { animation-delay: 0.05s; }
                 flu: document.getElementById('expIdFlu').value.trim().toUpperCase()
             };
             cfg._uiDate = document.getElementById('expDate').value.trim();   // 畫面暫存，重畫不重設
-            var picks = { slots: {}, idCodes: cfg.idCodes, org: cfg.org, date: cfg._uiDate };
+            // 流感名單個別拉選（存回 fluPersonCodes，跨重繪保留）
+            for (var fi = 0; fi < fluPersonList.length; fi++) {
+                var fsel = document.getElementById('expFluSel_' + fi);
+                if (!fsel) continue;
+                if (fsel.value) fluPersonCodes[fluPersonList[fi].id] = fsel.value;
+                else delete fluPersonCodes[fluPersonList[fi].id];
+            }
+            var picks = { slots: {}, idCodes: cfg.idCodes, org: cfg.org, date: cfg._uiDate,
+                          fluCodes: fluPersonCodes };
             var slots = ['k', 'z', 'v'];
             cfg.lastPick = cfg.lastPick || {};
             cfg._uiDose = cfg._uiDose || {};

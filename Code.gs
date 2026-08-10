@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v3.8)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v3.9)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -31,6 +31,9 @@
  *  - 新冠身分別代碼改依「接種對象年齡」自動計算（出生日期 vs 接種日期）：
  *    6月-4歲 C15 / 5-11歲 C14 / 12-17歲 C17 / 18-49歲 C12 / 50-64歲 C10 /
  *    65-74歲 C11 / 75歲以上 C08A；HIS 檔內值仍優先，備援代號僅在無出生日期時使用
+ * v3.9 變更（流感身分別個別拉選）：
+ *  - 產檔面板列出 6Z 流感名單，每人可從附件14 對象別代碼表（F01~F09）個別拉選；
+ *    未拉選者用「流感預設代號」；優先序：個別拉選 > 預設代號
  */
 
 function doGet() {
@@ -544,6 +547,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
     picks = picks || {};
     var slotPicks = picks.slots || {};
     var idCodes = picks.idCodes || {};
+    var fluCodes = picks.fluCodes || {};   // 流感每人個別拉選的身分別（id -> F代碼）
     var org = String(picks.org || '').trim();
     var date = String(picks.date || '').trim();
     if (!org) return { errorMessage: '請填接種機構代碼！' };
@@ -594,7 +598,8 @@ function buildNiisExport(phisFiles, jnContent, picks) {
           // 新冠：一律依年齡自動判斷（只看出生年）；無出生日期才用備援代號
           identity = covidIdentityByAge(parsed.idBirthMap[pid], date) || idCodes.corona || '';
         } else if (def.family === 'flu') {
-          identity = parsed.idIdentMap[pid] || idCodes.flu || '';
+          // 流感：前端名單個別拉選優先，未拉選用預設代號
+          identity = fluCodes[pid] || parsed.idIdentMap[pid] || idCodes.flu || '';
         }
         // 肺鏈不填身分別
         var sex = parsed.idSexMap[pid] || '';
@@ -617,7 +622,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
           if (def.family !== 'lung' && !slotRows[r][16]) {
             return { errorMessage: def.family === 'corona'
               ? '新冠有人缺出生日期，無法依年齡判斷身分別，請填「新冠備援代號」！'
-              : '請先填流感身分別代號！' };
+              : '流感有人未選身分別，請在名單中拉選或填「流感預設代號」！' };
           }
           var cells = [];
           for (var c = 0; c < slotRows[r].length; c++) cells.push(csvField(slotRows[r][c]));
