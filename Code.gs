@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v3.2)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v3.5)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -10,6 +10,12 @@
  *  - 疫苗辨識規則改為「設定驅動」，儲存在 Script Properties（全所共用）
  *  - 前端齒輪設定面板可檢視/編輯代號、複製群組新增辨識群組與針數邏輯
  *  - 辨識改為「較精確（較長）代號優先」計分制，不再依賴判斷順序
+ * v3.5 變更（PHIS 交叉對針回歸）：
+ *  - 新增 6K/6Z/6V 三個 PHIS 掛號檔「選傳」欄位；針數仍以 NIIS 為準，
+ *    PHIS 檔用來對針：列出「NIIS 有、PHIS 未掛」與「PHIS 有掛、NIIS 沒有」差異名單
+ *  - PHIS 檔以表頭偵測欄位（實測 13 欄格式身份證在第4欄），舊格式（A欄=身分證）相容
+ *  - PHIS 檔以「優待別」欄自動驗證檔案類型（6K/6Z/6V 放錯會擋下）
+ *  - 流感身份別 F 分類統計：依 NIIS 檔身份別欄（附件14 新標準），未知代碼動態顯示
  */
 
 function doGet() {
@@ -198,14 +204,27 @@ function analyzeNIIS(jnContent, config) {
   var idBirthMap = {};
   var birthCol = detectBirthColumn(rows);
   var classification = {};
-  for (var g = 0; g < config.length; g++) classification[config[g].key] = [];
+  var keyFamily = {};
+  for (var g = 0; g < config.length; g++) {
+    classification[config[g].key] = [];
+    keyFamily[config[g].key] = config[g].family;
+  }
   var idCategoryCount = {};   // id -> { 群組key: 掛號次數 }
   var unrecognized = [];      // 無法辨識的資料列 [{name, type}]
+
+  // 身份別欄（流感 F 對象別代碼）：表頭含「身份別／身分別」
+  var identityCol = -1;
+  var header0 = rows[0] || [];
+  for (var hc = 0; hc < header0.length; hc++) {
+    var hv = String(header0[hc] || '');
+    if (hv.indexOf('身份別') !== -1 || hv.indexOf('身分別') !== -1) { identityCol = hc; break; }
+  }
+  var idFCodeMap = {};        // 流感受種者 id -> F 對象別代碼
 
   for (var i = 1; i < rows.length; i++) {
     var row = rows[i];
     if (!row) continue;
-    var id = (row[0] || '').toString().trim();
+    var id = (row[0] || '').toString().trim().toUpperCase();  // 統一大寫，與 PHIS 檔對針一致
     var name = (row[1] || '').toString().trim();
     var raw = (row[10] || '').toString().trim();
     if (!id && !name && !raw) continue;  // 空白列
@@ -229,6 +248,12 @@ function analyzeNIIS(jnContent, config) {
       classification[cat].push(id);
     }
     idCategoryCount[id][cat]++;
+
+    // 流感列記錄 F 對象別代碼
+    if (keyFamily[cat] === 'flu' && identityCol >= 0 && !idFCodeMap[id]) {
+      var fc = (row[identityCol] || '').toString().trim().toUpperCase();
+      if (fc) idFCodeMap[id] = fc;
+    }
   }
 
   return {
@@ -236,18 +261,80 @@ function analyzeNIIS(jnContent, config) {
     idBirthMap: idBirthMap,
     classification: classification,
     idCategoryCount: idCategoryCount,
-    unrecognized: unrecognized
+    unrecognized: unrecognized,
+    idFCodeMap: idFCodeMap,
+    hasIdentityCol: identityCol >= 0
   };
 }
 
+// ===== PHIS 掛號檔解析（v3.5 交叉對針） =====
+// 實測 PHIS 匯出為 13 欄（身份證在第4欄、「優待別」欄標 6V/6k/6Z）；
+// 以表頭關鍵字偵測欄位，舊格式（A欄=身分證、B欄=姓名）也相容。
+function parsePhisList(content) {
+  var rows = Utilities.parseCsv(content);
+  var header = rows[0] || [];
+  var idCol = -1, nameCol = -1, birthCol = -1, typeCol = -1;
+  for (var c = 0; c < header.length; c++) {
+    var h = String(header[c] || '');
+    if (idCol === -1 && (h.indexOf('身份證') !== -1 || h.indexOf('身分證') !== -1)) idCol = c;
+    if (nameCol === -1 && h.indexOf('姓名') !== -1) nameCol = c;
+    if (birthCol === -1 && h.indexOf('出生') !== -1) birthCol = c;
+    if (typeCol === -1 && h.indexOf('優待別') !== -1) typeCol = c;
+  }
+  if (idCol === -1) { idCol = 0; if (nameCol === -1) nameCol = 1; }  // 無表頭關鍵字時回退舊格式
+
+  var idNameMap = {};
+  var idBirthMap = {};
+  var typeValues = {};   // 出現過的優待別值（大寫 -> 原值），整欄掃描供驗證
+  for (var i = 1; i < rows.length; i++) {
+    var row = rows[i] || [];
+    var id = (row[idCol] || '').toString().trim().toUpperCase();
+    if (!id) continue;
+    if (!idNameMap[id]) idNameMap[id] = ((nameCol >= 0 ? row[nameCol] : '') || '').toString().trim() || id;
+    if (birthCol >= 0 && !idBirthMap[id]) {
+      var b = (row[birthCol] || '').toString().trim();
+      if (b) idBirthMap[id] = b;
+    }
+    if (typeCol >= 0) {
+      var tv = (row[typeCol] || '').toString().trim();
+      if (tv) typeValues[tv.toUpperCase()] = tv;
+    }
+  }
+  return { idNameMap: idNameMap, idBirthMap: idBirthMap, typeValues: typeValues, hasTypeCol: typeCol >= 0 };
+}
+
+// 流感疫苗接種計畫接種對象代碼對照表（附件14，2026-08 新標準）
+// 未列出的代碼會以原代碼動態顯示，不會漏計
+var FLU_TARGET_NAMES = {
+  F01:    '6個月以上至國小入學前幼兒',
+  F02A01: '國小學童',
+  F02A02: '國中生',
+  F02A03: '高中/職、五專1-3年級學生',
+  F02B:   '幼兒園托育機構工作人員/居家托育人員',
+  F03A:   '滿50歲以上成人（所內/合約院所）',
+  F03B:   '滿50歲以上成人（社區/企業/到宅）',
+  F04A:   '長照機構受照顧者',
+  F04B:   '長照機構直接照顧工作人員',
+  F05A:   '孕婦',
+  F05B:   '6個月內嬰兒之雙親/實際扶養者',
+  F06A:   '高風險慢性病患',
+  F06B:   '罕見疾病患者',
+  F06C:   '重大傷病患者',
+  F07A:   '具執業登記之醫事人員',
+  F07B:   '醫療院所非執登工作人員',
+  F07C:   '防疫相關人員',
+  F07D:   '禽畜養殖/動物防疫相關行業工作人員',
+  F09:    '擴大對象'
+};
+
 /**
- * 主統計函數（v3.2：辨識規則由設定驅動）
+ * 主統計函數（v3.2：辨識規則由設定驅動；v3.5：加 PHIS 交叉對針與 F 分類）
  * 回傳：
  *  - { errorMessage } 檔案問題
  *  - { needUserInput, errorType, errorPersons, message } 需人工排除的異常
  *  - { htmlContent, nonCoronaCount, nonCoronaDetails, stats, processingMs } 統計結果
  */
-function compareCSVFiles(jnContent, masterFileName) {
+function compareCSVFiles(jnContent, masterFileName, phisFiles) {
   var t0 = Date.now();
 
   if (!jnContent) {
@@ -255,6 +342,30 @@ function compareCSVFiles(jnContent, masterFileName) {
   }
   if (masterFileName && masterFileName.toLowerCase().indexOf('niis') === -1) {
     return { errorMessage: "請確認上傳的檔案名稱包含 'NIIS' 字樣" };
+  }
+
+  // ===== PHIS 掛號檔（選傳）：解析＋優待別驗證 =====
+  phisFiles = phisFiles || {};
+  var PHIS_SLOTS = [
+    { slot: 'k', family: 'corona', title: '新冠（6K 檔）', box: 'red-box',    expect: '6K' },
+    { slot: 'z', family: 'flu',    title: '流感（6Z 檔）', box: 'blue-box',   expect: '6Z' },
+    { slot: 'v', family: 'lung',   title: '肺鏈（6V 檔）', box: 'orange-box', expect: '6V' }
+  ];
+  var phisParsed = {};   // slot -> parsePhisList 結果
+  for (var p = 0; p < PHIS_SLOTS.length; p++) {
+    var slotDef = PHIS_SLOTS[p];
+    var pc = phisFiles[slotDef.slot];
+    if (!pc) continue;
+    var parsed = parsePhisList(pc);
+    if (parsed.hasTypeCol) {
+      for (var tvk in parsed.typeValues) {
+        if (tvk !== slotDef.expect) {
+          return { errorMessage: 'PHIS ' + slotDef.expect + ' 檔案錯誤：優待別欄出現「' +
+            parsed.typeValues[tvk] + '」，請確認檔案是否放錯欄位！' };
+        }
+      }
+    }
+    phisParsed[slotDef.slot] = parsed;
   }
 
   var config = getVaccineConfigList();
@@ -381,6 +492,37 @@ function compareCSVFiles(jnContent, masterFileName) {
   onlyFlu.sort(byStroke);
   onlyLung.sort(byStroke);
 
+  // ===== PHIS 交叉對針差異計算（v3.5：NIIS 為準） =====
+  var niisFamilyIds = { corona: [], flu: [], lung: [] };
+  for (var nid in idCategoryCount) {
+    var nf = familyGroupsOf(nid);
+    if (nf.corona.length) niisFamilyIds.corona.push(nid);
+    if (nf.flu.length) niisFamilyIds.flu.push(nid);
+    if (nf.lung.length) niisFamilyIds.lung.push(nid);
+  }
+  var phisChecks = [];
+  for (var p2 = 0; p2 < PHIS_SLOTS.length; p2++) {
+    var def = PHIS_SLOTS[p2];
+    var pr = phisParsed[def.slot];
+    if (!pr) continue;
+    var phisIds = Object.keys(pr.idNameMap);
+    var famIds = niisFamilyIds[def.family];
+    var phisSet = {};
+    for (var x = 0; x < phisIds.length; x++) phisSet[phisIds[x]] = true;
+    var famSet = {};
+    for (var y = 0; y < famIds.length; y++) famSet[famIds[y]] = true;
+    var missing = [];   // NIIS 有名單、PHIS 未掛
+    var extra = [];     // PHIS 有掛、NIIS 沒名單
+    for (var m = 0; m < famIds.length; m++) if (!phisSet[famIds[m]]) missing.push(famIds[m]);
+    for (var e = 0; e < phisIds.length; e++) if (!famSet[phisIds[e]]) extra.push(phisIds[e]);
+    missing.sort(byStroke);
+    extra.sort(function(a, b) {
+      return (pr.idNameMap[a] || '').localeCompare(pr.idNameMap[b] || '', 'zh-Hant');
+    });
+    phisChecks.push({ def: def, parsed: pr, phisCount: phisIds.length, niisCount: famIds.length,
+                      matched: famIds.length - missing.length, missing: missing, extra: extra });
+  }
+
   // ===== 針數計算（依設定群組） =====
   var stats = {};
   var totalShots = 0;
@@ -466,12 +608,76 @@ function compareCSVFiles(jnContent, masterFileName) {
     result += needleBlock(config[g], stats[config[g].key]);
   }
 
+  // PHIS 對針區塊（v3.5）：僅在 PHIS 檔上傳時顯示，NIIS 沒名單者浮標可看身分證/出生
+  function phisPersonSpan(id, parsed, color) {
+    var tip = '身分證：' + escapeHtml(id) +
+      (parsed.idBirthMap[id] ? '&#10;出生：' + escapeHtml(parsed.idBirthMap[id]) : '') +
+      '&#10;（僅在 PHIS 掛號檔，NIIS 名單無此人）';
+    return "<span class='pname' style='color:" + color + ";' data-tip=\"" + tip + "\">" +
+      escapeHtml(parsed.idNameMap[id] || id) + '</span>';
+  }
+
+  function phisSection(chk) {
+    var tip = '以 NIIS 名單為準，比對 PHIS 掛號檔&#10;紅＝NIIS 有名單但 PHIS 沒掛號&#10;橘＝PHIS 有掛號但 NIIS 沒名單';
+    var html = "<div class='section'>";
+    html += "<div class='box " + chk.def.box + "'>";
+    html += "<strong style='font-size:20px;'>PHIS 對針 - " + chk.def.title + "：</strong>";
+    html += "<span data-tip=\"" + tip + "\">PHIS 掛號 <b>" + chk.phisCount + "</b> 人｜NIIS 名單 <b>" +
+      chk.niisCount + "</b> 人｜相符 <b>" + chk.matched + "</b> 人</span>";
+    if (chk.missing.length === 0 && chk.extra.length === 0) {
+      html += "　<span style='color:#27ae60;font-weight:bold;'>✔ 完全相符</span>";
+    } else {
+      if (chk.missing.length > 0) {
+        var mspans = [];
+        for (var mi = 0; mi < chk.missing.length; mi++) mspans.push(personSpan(chk.missing[mi], '#c62828'));
+        html += "<div style='margin-top:10px;line-height:1.8;'><span style='color:#c62828;font-weight:bold;'>❗ NIIS 有名單、PHIS 未掛（" +
+          chk.missing.length + " 人）：</span>" + mspans.join('、') + '</div>';
+      }
+      if (chk.extra.length > 0) {
+        var espans = [];
+        for (var ei = 0; ei < chk.extra.length; ei++) espans.push(phisPersonSpan(chk.extra[ei], chk.parsed, '#e65100'));
+        html += "<div style='margin-top:10px;line-height:1.8;'><span style='color:#e65100;font-weight:bold;'>⚠ PHIS 有掛、NIIS 沒名單（" +
+          chk.extra.length + " 人）：</span>" + espans.join('、') + '</div>';
+      }
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  for (var pc2 = 0; pc2 < phisChecks.length; pc2++) {
+    result += phisSection(phisChecks[pc2]);
+  }
+
   result += groupSection('新冠+流感', '#20b2aa', groupCoronaFlu);
   result += groupSection('流感+肺鏈', '#f57c00', groupFluLung);
   result += groupSection('新冠+肺鏈', '#7b1fa2', groupCoronaLung);
   result += groupSection('僅新冠', '#388e3c', onlyCorona);
   result += groupSection('僅流感', '#1976d2', onlyFlu);
   result += groupSection('僅肺鏈', '#f57c00', onlyLung);
+
+  // 流感身份別 F 分類（v3.5，附件14 新標準；未知代碼以原代碼顯示）
+  var idFCodeMap = data.idFCodeMap || {};
+  var fGroups = {};
+  var fluNoCode = [];
+  if (data.hasIdentityCol) {
+    for (var q = 0; q < niisFamilyIds.flu.length; q++) {
+      var fid = niisFamilyIds.flu[q];
+      var fcode = idFCodeMap[fid];
+      if (fcode) (fGroups[fcode] = fGroups[fcode] || []).push(fid);
+      else fluNoCode.push(fid);
+    }
+  }
+  var fCodes = Object.keys(fGroups).sort();
+  for (var fi = 0; fi < fCodes.length; fi++) {
+    var codeK = fCodes[fi];
+    fGroups[codeK].sort(byStroke);
+    var fLabel = '流感 ' + codeK + (FLU_TARGET_NAMES[codeK] ? ' ' + FLU_TARGET_NAMES[codeK] : '（未知對象別）');
+    result += groupSection(fLabel, '#8e44ad', fGroups[codeK]);
+  }
+  if (fCodes.length > 0 && fluNoCode.length > 0) {
+    fluNoCode.sort(byStroke);
+    result += groupSection('流感 未填身份別', '#8e44ad', fluNoCode);
+  }
 
   return {
     htmlContent: result,

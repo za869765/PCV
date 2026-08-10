@@ -232,6 +232,113 @@ h1::after {
     min-height: 1.2em;
 }
 
+/* ===== PHIS 對針檔（選傳）上傳列 ===== */
+.phis-upload-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: -16px 0 32px;
+}
+
+.phis-card {
+    flex: 1;
+    min-width: 220px;
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-soft);
+    padding: 14px 16px;
+    border-left: 6px solid #ccc;
+    position: relative;
+    transition: all var(--transition-speed) ease;
+}
+
+.phis-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-medium);
+}
+
+.phis-card.k { border-left-color: #f44336; }
+.phis-card.z { border-left-color: #2196f3; }
+.phis-card.v { border-left-color: #ff9800; }
+
+.phis-card-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 8px;
+}
+
+.phis-card-title small {
+    color: var(--text-light);
+    font-weight: 400;
+}
+
+.phis-file-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    border: 2px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8f9fa;
+    font-size: 0.85rem;
+    color: var(--text-light);
+    transition: all var(--transition-speed) ease;
+    overflow: hidden;
+}
+
+.phis-file-btn input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.phis-file-btn:hover {
+    border-color: var(--primary-color);
+    background: #e3f2fd;
+}
+
+.phis-card.attached .phis-file-btn {
+    border-color: var(--success-color);
+    background: #e8f5e8;
+    color: var(--success-dark);
+    font-weight: 600;
+}
+
+.phis-file-name {
+    font-size: 0.78rem;
+    color: var(--success-dark);
+    margin-top: 6px;
+    word-break: break-all;
+    min-height: 1em;
+}
+
+.phis-clear {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 50%;
+    background: #e74c3c;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    display: none;
+    line-height: 1;
+    font-family: 'Noto Sans TC', sans-serif;
+}
+
+.phis-card.attached .phis-clear {
+    display: block;
+}
+
+.phis-clear:hover {
+    background: #c0392b;
+}
+
 /* ===== 按鈕 ===== */
 .button-group {
     display: flex;
@@ -369,11 +476,13 @@ h1::after {
 
 h1,
 .main-upload-hero,
+.phis-upload-row,
 .button-group {
     animation: fadeUpIn 0.7s var(--ease-out-quart) both;
 }
 h1                { animation-delay: 0.05s; }
 .main-upload-hero { animation-delay: 0.18s; }
+.phis-upload-row  { animation-delay: 0.24s; }
 .button-group     { animation-delay: 0.30s; }
 
 /* 結果區：每個 .section 逐一 fade-up */
@@ -1337,6 +1446,7 @@ h1                { animation-delay: 0.05s; }
     }
 
     .main-upload-hero,
+    .phis-upload-row,
     .button-group,
     .divider,
     .modal,
@@ -1412,6 +1522,28 @@ h1                { animation-delay: 0.05s; }
                     <div class="main-file-icon" id="mainFileIcon"></div>
                 </div>
                 <div class="main-file-name" id="mainFileName"></div>
+            </div>
+
+            <!-- ===== PHIS 對針檔（選傳）：夾帶後自動與 NIIS 名單交叉對針 ===== -->
+            <div class="phis-upload-row" id="phisUploadRow">
+                <div class="phis-card k" id="phisCard_k" data-tip="PHIS 新冠掛號檔（優待別 6K）&#10;選傳：夾帶後自動與 NIIS 名單交叉對針&#10;列出兩邊不一致的名單">
+                    <button type="button" class="phis-clear" onclick="clearPhis('k')">✕</button>
+                    <div class="phis-card-title">PHIS 6K 新冠 <small>(選傳)</small></div>
+                    <div class="phis-file-btn"><input type="file" accept=".csv" id="phisFile_k" onchange="handlePhisSelected('k')"><span id="phisHint_k">夾帶 6K 掛號檔</span></div>
+                    <div class="phis-file-name" id="phisName_k"></div>
+                </div>
+                <div class="phis-card z" id="phisCard_z" data-tip="PHIS 流感掛號檔（優待別 6Z）&#10;選傳：夾帶後自動與 NIIS 名單交叉對針&#10;列出兩邊不一致的名單">
+                    <button type="button" class="phis-clear" onclick="clearPhis('z')">✕</button>
+                    <div class="phis-card-title">PHIS 6Z 流感 <small>(選傳)</small></div>
+                    <div class="phis-file-btn"><input type="file" accept=".csv" id="phisFile_z" onchange="handlePhisSelected('z')"><span id="phisHint_z">夾帶 6Z 掛號檔</span></div>
+                    <div class="phis-file-name" id="phisName_z"></div>
+                </div>
+                <div class="phis-card v" id="phisCard_v" data-tip="PHIS 肺鏈掛號檔（優待別 6V）&#10;選傳：夾帶後自動與 NIIS 名單交叉對針&#10;列出兩邊不一致的名單">
+                    <button type="button" class="phis-clear" onclick="clearPhis('v')">✕</button>
+                    <div class="phis-card-title">PHIS 6V 肺鏈 <small>(選傳)</small></div>
+                    <div class="phis-file-btn"><input type="file" accept=".csv" id="phisFile_v" onchange="handlePhisSelected('v')"><span id="phisHint_v">夾帶 6V 掛號檔</span></div>
+                    <div class="phis-file-name" id="phisName_v"></div>
+                </div>
             </div>
 
             <div class="button-group">
@@ -1534,7 +1666,7 @@ h1                { animation-delay: 0.05s; }
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v3.4</div>
+    <div class="version-tag">v3.5</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -1625,6 +1757,79 @@ h1                { animation-delay: 0.05s; }
             document.getElementById('mainFileName').textContent = '';
         }
 
+        /* ===== PHIS 對針檔（選傳，v3.5） ===== */
+        // 簡易 CSV 單列解析（處理引號欄位，避免地址含逗號時欄位偏移）
+        function splitCsvLine(line) {
+            var out = [], cur = '', inQ = false;
+            for (var i = 0; i < line.length; i++) {
+                var ch = line[i];
+                if (inQ) {
+                    if (ch === '"') {
+                        if (line[i + 1] === '"') { cur += '"'; i++; }
+                        else inQ = false;
+                    } else cur += ch;
+                } else if (ch === '"') inQ = true;
+                else if (ch === ',') { out.push(cur); cur = ''; }
+                else cur += ch;
+            }
+            out.push(cur);
+            return out;
+        }
+
+        var phisFiles = { k: null, z: null, v: null };
+        var PHIS_META = {
+            k: { label: '6K 新冠', expect: '6K' },
+            z: { label: '6Z 流感', expect: '6Z' },
+            v: { label: '6V 肺鏈', expect: '6V' }
+        };
+
+        function handlePhisSelected(slot) {
+            var input = document.getElementById('phisFile_' + slot);
+            var file = input.files[0];
+            if (!file) return;
+            input.value = '';  // 允許同一檔案重新夾帶
+
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                showFx('error', '檔案格式錯誤', '請選擇 CSV 格式的檔案！', 2400);
+                return;
+            }
+            readFileAsText(file, 'big5').then(function(content) {
+                // 以「優待別」欄驗證檔案類型（新版 PHIS 匯出格式；無此欄則交由後端判斷）
+                var rows = content.split(/\r?\n/);
+                var header = splitCsvLine(rows[0] || '');
+                var typeIdx = -1;
+                for (var i = 0; i < header.length; i++) {
+                    if (header[i].indexOf('優待別') !== -1) { typeIdx = i; break; }
+                }
+                if (typeIdx >= 0 && rows.length > 1) {
+                    var tv = (splitCsvLine(rows[1] || '')[typeIdx] || '').trim();
+                    if (tv && tv.toUpperCase() !== PHIS_META[slot].expect) {
+                        showFx('error', '非 ' + PHIS_META[slot].expect + ' 檔案',
+                            '優待別欄為「' + tv + '」，請確認夾帶正確的 PHIS 檔', 3200);
+                        return;
+                    }
+                }
+                phisFiles[slot] = file;
+                document.getElementById('phisCard_' + slot).classList.add('attached');
+                document.getElementById('phisName_' + slot).textContent = file.name;
+                if (currentFile) {
+                    startStatistics(currentFile);  // 立即重新統計＋對針
+                } else {
+                    showFx('emoji', '已夾帶 ' + PHIS_META[slot].label,
+                        '夾帶 NIIS 名單後將自動交叉對針', 2200, '📎');
+                }
+            }).catch(function(err) {
+                showFx('error', '讀取檔案時發生錯誤', String(err), 3200);
+            });
+        }
+
+        function clearPhis(slot) {
+            phisFiles[slot] = null;
+            document.getElementById('phisCard_' + slot).classList.remove('attached');
+            document.getElementById('phisName_' + slot).textContent = '';
+            if (currentFile) startStatistics(currentFile);
+        }
+
         function resetResultArea() {
             hasResult = false;
             document.getElementById('result').innerHTML = '';
@@ -1633,16 +1838,25 @@ h1                { animation-delay: 0.05s; }
             document.getElementById('blankLine').style.display = 'none';
         }
 
+        var statSeq = 0;   // 統計請求序號：快速重選/清除檔案時，舊回應不得覆蓋新結果
+
         function startStatistics(file) {
+            var mySeq = ++statSeq;
             resetResultArea();
             showFx('loading', '統計中', '正在讀取並比對名單…');
             document.getElementById('result').innerHTML =
                 '<div class="empty-state"><div class="hourglass-loader"></div>' +
                 '<div class="empty-state-text pulse-effect">正在處理檔案<span class="loading-dots"></span></div></div>';
 
-            readFileAsText(file, 'big5').then(function(content) {
+            var readAll = [readFileAsText(file, 'big5')];
+            ['k', 'z', 'v'].forEach(function(slot) {
+                readAll.push(phisFiles[slot] ? readFileAsText(phisFiles[slot], 'big5') : Promise.resolve(''));
+            });
+            Promise.all(readAll).then(function(contents) {
+                if (mySeq !== statSeq) return;
                 google.script.run
                     .withSuccessHandler(function(result) {
+                        if (mySeq !== statSeq) return;
                         if (result.errorMessage) {
                             showFx('error', '統計失敗', result.errorMessage, 3200);
                             resetResultArea();
@@ -1667,11 +1881,14 @@ h1                { animation-delay: 0.05s; }
                         }
                     })
                     .withFailureHandler(function(error) {
+                        if (mySeq !== statSeq) return;
                         showFx('error', '處理過程中發生錯誤', (error && error.message) || String(error), 3600);
                         resetResultArea();
                     })
-                    .compareCSVFiles(content, file.name);
+                    .compareCSVFiles(contents[0], file.name,
+                        { k: contents[1], z: contents[2], v: contents[3] });
             }).catch(function(error) {
+                if (mySeq !== statSeq) return;
                 showFx('error', '讀取檔案時發生錯誤', String(error), 3200);
                 resetResultArea();
             });
@@ -1860,16 +2077,22 @@ h1                { animation-delay: 0.05s; }
                     .sendEmailWithAttachments(document.getElementById('result').innerHTML, note, fileContents, validEmails);
             };
 
-            if (currentFile) {
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    proceed([{ name: '流感系統名單_' + currentFile.name, content: e.target.result.split(',')[1] }]);
-                };
-                reader.onerror = function() { proceed([]); };
-                reader.readAsDataURL(currentFile);
-            } else {
-                proceed([]);
-            }
+            // 附件：NIIS 名單 + 已夾帶的 PHIS 對針檔
+            var filesToAttach = [];
+            if (currentFile) filesToAttach.push({ file: currentFile, name: '流感系統名單_' + currentFile.name });
+            ['k', 'z', 'v'].forEach(function(slot) {
+                if (phisFiles[slot]) filesToAttach.push({ file: phisFiles[slot], name: 'PHIS_' + PHIS_META[slot].expect + '_' + phisFiles[slot].name });
+            });
+            Promise.all(filesToAttach.map(function(f) {
+                return new Promise(function(resolve) {
+                    var reader = new FileReader();
+                    reader.onload = function(e) { resolve({ name: f.name, content: e.target.result.split(',')[1] }); };
+                    reader.onerror = function() { resolve(null); };
+                    reader.readAsDataURL(f.file);
+                });
+            })).then(function(list) {
+                proceed(list.filter(function(x) { return x; }));
+            });
         }
 
         /* ===== 一般通知Modal ===== */
