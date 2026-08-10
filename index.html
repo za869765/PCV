@@ -1,0 +1,2178 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>佳里區衛生所 - 疫苗掛號對針小工具</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+    --primary-color: #3498db;
+    --primary-dark: #2980b9;
+    --success-color: #2ecc71;
+    --success-dark: #27ae60;
+    --danger-color: #e74c3c;
+    --danger-dark: #c0392b;
+    --text-color: #2c3e50;
+    --text-light: #7f8c8d;
+    --background: #f9f9fa;
+    --card-bg: #ffffff;
+    --border-radius: 12px;
+    --transition-speed: 0.3s;
+    --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.05);
+    --shadow-medium: 0 10px 20px rgba(0, 0, 0, 0.08);
+    --shadow-strong: 0 15px 30px rgba(0, 0, 0, 0.12);
+    --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+    --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: linear-gradient(140deg, #f3f4f6 0%, #e5e7eb 100%);
+    margin: 0;
+    padding: 30px;
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+h1 {
+    color: var(--text-color);
+    font-weight: 700;
+    font-size: 2.5rem;
+    text-align: center;
+    margin-bottom: 2rem;
+    position: relative;
+    padding-bottom: 1rem;
+    letter-spacing: 0.5px;
+}
+
+h1::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+    border-radius: 2px;
+    background-size: 200% 100%;
+    animation: titleUnderlineShift 4s ease-in-out infinite;
+}
+
+@keyframes titleUnderlineShift {
+    0%, 100% { background-position: 0% 50%; }
+    50%      { background-position: 100% 50%; }
+}
+
+.container {
+    max-width: 1300px;
+    margin: 0 auto;
+}
+
+/* ===== 主上傳區塊（NIIS / 流感系統）===== */
+.main-upload-hero {
+    position: relative;
+    background-color: var(--card-bg);
+    padding: 26px 26px 26px 88px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-soft);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    transition: all var(--transition-speed) ease;
+    overflow: hidden;
+    margin-bottom: 32px;
+}
+
+.main-upload-hero:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-strong);
+}
+
+.main-upload-hero::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 72px;
+    height: 100%;
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    border-radius: var(--border-radius) 0 0 var(--border-radius);
+}
+
+.main-upload-hero::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 72px;
+    height: 100%;
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.35) 50%,
+        transparent 100%
+    );
+    transform: translateY(-100%);
+    transition: transform 0.7s var(--ease-out-quart);
+    pointer-events: none;
+    border-radius: var(--border-radius) 0 0 var(--border-radius);
+}
+
+.main-upload-hero:hover::after {
+    transform: translateY(100%);
+}
+
+.main-upload-hero label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 16px;
+    line-height: 1.4;
+}
+
+.main-upload-hero label small {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: var(--text-light);
+    margin-top: 4px;
+}
+
+.main-file-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 72px;
+    border: 3px dashed #bdc3c7;
+    border-radius: var(--border-radius);
+    background: #f8f9fa;
+    transition: all var(--transition-speed) ease;
+    overflow: hidden;
+}
+
+.main-file-input-wrapper input[type="file"] {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.main-file-input-wrapper:hover {
+    border-color: var(--primary-color);
+    background: #e3f2fd;
+    transform: scale(1.02);
+}
+
+.main-file-input-wrapper.file-selected {
+    border-color: var(--success-color);
+    background: #e8f5e8;
+    animation: fileSelectedPop 0.45s var(--ease-out-back) both;
+}
+
+@keyframes fileSelectedPop {
+    0%   { transform: scale(1);    }
+    40%  { transform: scale(1.04); }
+    100% { transform: scale(1);    }
+}
+
+.main-file-input-wrapper.file-selected::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: rgba(46, 204, 113, 0.5);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: fileSelectedRipple 0.7s var(--ease-out-quart) both;
+    pointer-events: none;
+    z-index: 1;
+}
+
+@keyframes fileSelectedRipple {
+    0%   { width: 8px;   height: 8px;   opacity: 0.6; }
+    100% { width: 240px; height: 240px; opacity: 0;   }
+}
+
+.main-file-icon {
+    font-size: 1.8rem;
+    color: var(--text-light);
+    transition: all var(--transition-speed) ease;
+    pointer-events: none;
+}
+
+.main-file-input-wrapper:hover .main-file-icon {
+    color: var(--primary-color);
+    transform: scale(1.08);
+}
+
+.main-file-input-wrapper.file-selected .main-file-icon {
+    color: var(--success-color);
+}
+
+.main-file-name {
+    font-size: 0.85rem;
+    color: var(--success-dark);
+    margin-top: 10px;
+    font-weight: 500;
+    word-break: break-all;
+    min-height: 1.2em;
+}
+
+/* ===== 按鈕 ===== */
+.button-group {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+}
+
+.big-button {
+    padding: 18px 36px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: all var(--transition-speed) ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
+    min-width: 160px;
+    box-shadow: var(--shadow-medium);
+    font-family: 'Noto Sans TC', sans-serif;
+}
+
+.big-button::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transition: left 0.6s;
+}
+
+.big-button:hover::before {
+    left: 100%;
+}
+
+.big-button:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-strong);
+}
+
+.big-button:active {
+    transform: translateY(-1px);
+}
+
+.big-button.print-button {
+    background: linear-gradient(135deg, var(--success-color), var(--success-dark));
+    color: white;
+    display: none;
+}
+
+.big-button.send-button {
+    background: linear-gradient(135deg, var(--danger-color), var(--danger-dark));
+    color: white;
+    display: none;
+}
+
+.big-button.print-button[style*="inline-block"],
+.big-button.send-button[style*="inline-block"] {
+    animation: actionBtnIn 0.55s var(--ease-out-back) both;
+}
+
+@keyframes actionBtnIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.92);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.divider {
+    border: none;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+    margin: 40px 0;
+    border-radius: 1px;
+}
+
+#result {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-soft);
+    padding: 30px;
+    margin-bottom: 30px;
+    min-height: 200px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-light);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+}
+
+.empty-state-text {
+    font-size: 1.2rem;
+    font-weight: 500;
+}
+
+.blank-message {
+    font-size: 1.1rem;
+    color: var(--text-light);
+    font-weight: 500;
+    padding: 20px;
+    border: 2px dashed #bdc3c7;
+    border-radius: var(--border-radius);
+    background: #f8f9fa;
+    display: inline-block;
+    min-width: 200px;
+}
+
+/* ===== 進場動畫 stagger ===== */
+@keyframes fadeUpIn {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+h1,
+.main-upload-hero,
+.button-group {
+    animation: fadeUpIn 0.7s var(--ease-out-quart) both;
+}
+h1                { animation-delay: 0.05s; }
+.main-upload-hero { animation-delay: 0.18s; }
+.button-group     { animation-delay: 0.30s; }
+
+/* 結果區：每個 .section 逐一 fade-up */
+#result .section {
+    animation: fadeUpIn 0.55s var(--ease-out-quart) both;
+}
+#result .section:nth-child(1)  { animation-delay: 0.05s; }
+#result .section:nth-child(2)  { animation-delay: 0.13s; }
+#result .section:nth-child(3)  { animation-delay: 0.21s; }
+#result .section:nth-child(4)  { animation-delay: 0.29s; }
+#result .section:nth-child(5)  { animation-delay: 0.37s; }
+#result .section:nth-child(6)  { animation-delay: 0.45s; }
+#result .section:nth-child(7)  { animation-delay: 0.53s; }
+#result .section:nth-child(8)  { animation-delay: 0.61s; }
+#result .section:nth-child(n+9){ animation-delay: 0.68s; }
+
+#result .box {
+    transition: transform 0.25s var(--ease-out-quart),
+                box-shadow 0.25s ease;
+}
+#result .box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+#blankLine {
+    animation: fadeUpIn 0.6s var(--ease-out-quart) both;
+}
+
+/* ===== 浮標詳細資料 tooltip（data-tip，JS 定位固定浮層，不被任何容器遮擋） ===== */
+[data-tip] {
+    cursor: help;
+}
+
+#tipBox {
+    position: fixed;
+    z-index: 30000;
+    background: rgba(30, 41, 59, 0.96);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.65;
+    padding: 10px 14px;
+    border-radius: 8px;
+    white-space: pre-line;
+    max-width: 340px;
+    text-align: left;
+    pointer-events: none;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    display: none;
+}
+
+#tipBox.show {
+    display: block;
+}
+
+#tipBox.on {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.pname {
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.pname:hover {
+    background-color: rgba(52, 152, 219, 0.12);
+}
+
+/* ===== 全螢幕動畫回饋彈窗 ===== */
+.fx-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20000;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(6px);
+}
+
+.fx-overlay.show {
+    display: flex;
+    animation: fxFadeIn 0.25s ease-out;
+}
+
+.fx-overlay.hide {
+    animation: fxFadeOut 0.28s ease forwards;
+}
+
+@keyframes fxFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes fxFadeOut {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+.fx-card {
+    background: white;
+    border-radius: 20px;
+    padding: 44px 60px;
+    text-align: center;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
+    animation: fxPop 0.45s var(--ease-out-back);
+    max-width: 90%;
+}
+
+@keyframes fxPop {
+    from {
+        opacity: 0;
+        transform: translateY(-24px) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.fx-card.fx-shake {
+    animation: fxShake 0.5s ease;
+}
+
+@keyframes fxShake {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(-10px); }
+    40%      { transform: translateX(8px); }
+    60%      { transform: translateX(-6px); }
+    80%      { transform: translateX(4px); }
+}
+
+.fx-icon {
+    width: 86px;
+    height: 86px;
+    margin: 0 auto 18px;
+    position: relative;
+}
+
+.fx-icon.success::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid rgba(46, 204, 113, 0.4);
+    animation: fxRing 0.9s ease-out 0.3s both;
+}
+
+@keyframes fxRing {
+    0%   { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(1.8); opacity: 0; }
+}
+
+.fx-spinner {
+    width: 86px;
+    height: 86px;
+    border-radius: 50%;
+    border: 7px solid #e5e7eb;
+    border-top-color: var(--primary-color);
+    animation: fxSpin 0.8s linear infinite;
+    margin: 0 auto;
+}
+
+@keyframes fxSpin {
+    to { transform: rotate(360deg); }
+}
+
+.fx-check, .fx-cross {
+    width: 86px;
+    height: 86px;
+}
+
+.fx-check-circle {
+    stroke: #2ecc71;
+    stroke-width: 3;
+    stroke-dasharray: 151;
+    stroke-dashoffset: 151;
+    animation: fxStroke 0.5s ease-out forwards;
+}
+
+.fx-check-mark {
+    stroke: #2ecc71;
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 36;
+    stroke-dashoffset: 36;
+    animation: fxStroke 0.35s 0.45s ease-out forwards;
+}
+
+.fx-cross-circle {
+    stroke: #e74c3c;
+    stroke-width: 3;
+    stroke-dasharray: 151;
+    stroke-dashoffset: 151;
+    animation: fxStroke 0.5s ease-out forwards;
+}
+
+.fx-cross-mark {
+    stroke: #e74c3c;
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-dasharray: 26;
+    stroke-dashoffset: 26;
+    animation: fxStroke 0.3s 0.4s ease-out forwards;
+}
+
+.fx-cross-mark2 {
+    animation-delay: 0.55s;
+}
+
+@keyframes fxStroke {
+    to { stroke-dashoffset: 0; }
+}
+
+.fx-emoji {
+    font-size: 64px;
+    line-height: 86px;
+    animation: fxEmojiPop 0.5s var(--ease-out-back);
+}
+
+@keyframes fxEmojiPop {
+    0%   { transform: scale(0.4); opacity: 0; }
+    100% { transform: scale(1);   opacity: 1; }
+}
+
+.fx-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.fx-sub {
+    margin-top: 6px;
+    color: var(--text-light);
+    font-size: 0.95rem;
+    white-space: pre-line;
+}
+
+/* ===== 一般 Modal ===== */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(5px);
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    padding: 40px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-strong);
+    text-align: center;
+    max-width: 500px;
+    width: 90%;
+    animation: modalSlideIn 0.4s var(--ease-out-back);
+    position: relative;
+}
+
+.modal-title {
+    color: var(--text-color);
+    margin-bottom: 20px;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.modal-content p {
+    margin-bottom: 30px;
+    color: var(--text-color);
+    font-size: 1.1rem;
+    line-height: 1.6;
+    white-space: pre-line;
+}
+
+.close-btn, .confirm-btn, .cancel-btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all var(--transition-speed) ease;
+    margin: 0 auto;
+    min-width: 100px;
+    display: inline-block;
+    font-family: 'Noto Sans TC', sans-serif;
+}
+
+.close-btn {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    color: white;
+}
+
+.confirm-btn {
+    background: linear-gradient(135deg, var(--success-color), var(--success-dark));
+    color: white;
+}
+
+.cancel-btn {
+    background: linear-gradient(135deg, var(--danger-color), var(--danger-dark));
+    color: white;
+}
+
+.close-btn:hover, .confirm-btn:hover, .cancel-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.note-textarea {
+    width: 100%;
+    height: 100px;
+    padding: 15px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    resize: vertical;
+    margin-bottom: 20px;
+    transition: border-color var(--transition-speed) ease;
+}
+
+.note-textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+/* ===== 異常人員彈窗 ===== */
+.custom-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(5px);
+    z-index: 10000;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.custom-modal-overlay.show {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.custom-modal-container {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    animation: modalSlideIn 0.4s var(--ease-out-back);
+    position: relative;
+}
+
+.custom-modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.custom-modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.custom-modal-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 28px;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.custom-modal-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.custom-modal-body {
+    padding: 24px;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.custom-modal-footer {
+    padding: 20px 24px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.person-card {
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    transition: all 0.2s;
+    animation: fadeUpIn 0.4s var(--ease-out-quart) both;
+}
+
+.custom-modal-body .person-card:nth-child(1) { animation-delay: 0.05s; }
+.custom-modal-body .person-card:nth-child(2) { animation-delay: 0.10s; }
+.custom-modal-body .person-card:nth-child(3) { animation-delay: 0.15s; }
+.custom-modal-body .person-card:nth-child(4) { animation-delay: 0.20s; }
+.custom-modal-body .person-card:nth-child(5) { animation-delay: 0.25s; }
+.custom-modal-body .person-card:nth-child(n+6) { animation-delay: 0.30s; }
+
+.person-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.person-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 8px;
+}
+
+.person-error {
+    color: #dc2626;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+.person-description {
+    color: #64748b;
+    font-size: 14px;
+}
+
+.modal-btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 80px;
+    font-family: 'Noto Sans TC', sans-serif;
+}
+
+.modal-btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.modal-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.modal-btn-secondary {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+
+.modal-btn-secondary:hover {
+    background: #e2e8f0;
+}
+
+.modal-btn-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.modal-btn-danger:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.94);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ===== 針數調整器 ===== */
+.needle-adjuster {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 15px;
+    gap: 8px;
+}
+
+.adjust-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    color: white;
+    transition: transform 0.15s ease, background-color 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.adjust-btn:active {
+    transform: scale(0.92);
+}
+
+.adjust-btn.ripple::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: btnRipple 0.55s ease-out;
+}
+
+@keyframes btnRipple {
+    0%   { width: 6px;  height: 6px;  opacity: 0.7; }
+    100% { width: 70px; height: 70px; opacity: 0;   }
+}
+
+.minus-btn {
+    background-color: #e74c3c;
+}
+
+.minus-btn:hover {
+    background-color: #c0392b;
+    transform: scale(1.1);
+}
+
+.plus-btn {
+    background-color: #2ecc71;
+}
+
+.plus-btn:hover {
+    background-color: #27ae60;
+    transform: scale(1.1);
+}
+
+.adjustment-input-field {
+    width: 60px;
+    height: 32px;
+    border: 2px solid #bdc3c7;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    transition: border-color 0.2s ease;
+}
+
+.adjustment-input-field:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.needle-count.modified {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+@keyframes countFlash {
+    0%   { background-color: rgba(255, 235, 59, 0); }
+    25%  { background-color: rgba(255, 235, 59, 0.55); }
+    100% { background-color: rgba(255, 235, 59, 0); }
+}
+
+.needle-count.flash {
+    animation: countFlash 0.9s ease-out;
+    border-radius: 4px;
+    padding: 0 4px;
+    margin: 0 -4px;
+}
+
+/* ===== 設定齒輪按鈕 ===== */
+.settings-gear {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(52, 152, 219, 0.92);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(10px);
+    transition: all 0.35s var(--ease-out-back);
+}
+
+.settings-gear:hover {
+    background: rgba(41, 128, 185, 0.95);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.gear-ico {
+    display: inline-block;
+    transition: transform 0.35s var(--ease-out-back);
+}
+
+.settings-gear:hover .gear-ico {
+    transform: rotate(90deg) scale(1.15);
+}
+
+.settings-gear:active .gear-ico {
+    transform: rotate(90deg) scale(0.95);
+}
+
+/* ===== 疫苗辨識設定編輯器 ===== */
+.settings-help {
+    background: #f1f5f9;
+    border-left: 4px solid var(--primary-color);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12.5px;
+    color: #475569;
+    margin-bottom: 16px;
+    line-height: 1.7;
+}
+
+.settings-row {
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+    transition: border-color 0.2s ease;
+    animation: fadeUpIn 0.35s var(--ease-out-quart) both;
+}
+
+.settings-row:hover {
+    border-color: #667eea;
+}
+
+.settings-row-head {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.s-input {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 14px;
+    font-family: 'Noto Sans TC', sans-serif;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background: white;
+    color: var(--text-color);
+}
+
+.s-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.12);
+}
+
+.s-label {
+    flex: 1;
+    min-width: 160px;
+    font-weight: 600;
+}
+
+.s-family {
+    width: 88px;
+    cursor: pointer;
+}
+
+.s-indicator {
+    width: 72px;
+    text-align: center;
+}
+
+.s-codes {
+    width: 100%;
+    letter-spacing: 0.5px;
+}
+
+.s-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    color: white;
+    font-family: 'Noto Sans TC', sans-serif;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.s-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+
+.s-btn:active {
+    transform: translateY(0) scale(0.96);
+}
+
+.s-copy {
+    background: #3498db;
+}
+
+.s-del {
+    background: #e74c3c;
+}
+
+.s-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.s-field-grow {
+    flex: 1;
+    min-width: 160px;
+}
+
+.s-field-codes {
+    width: 100%;
+}
+
+.s-cap {
+    font-size: 11.5px;
+    color: #94a3b8;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.s-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* 放大設定面板的可視範圍 */
+#settingsModal .custom-modal-body {
+    max-height: 68vh;
+}
+
+/* 浮標游標微調：輸入框維持文字游標、按鈕維持手型 */
+.s-field[data-tip] { cursor: default; }
+.s-input[data-tip] { cursor: text; }
+.s-btn[data-tip],
+.modal-btn[data-tip] { cursor: pointer; }
+
+/* 自訂確認彈窗按鈕列 */
+.confirm-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 24px;
+}
+
+/* ===== 版本編號 ===== */
+.version-tag {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(52, 152, 219, 0.9);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 9999;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+    animation: versionFloat 4s ease-in-out infinite;
+}
+
+.version-tag:hover {
+    background: rgba(41, 128, 185, 0.95);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    animation: none;
+}
+
+@keyframes versionFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-3px); }
+}
+
+/* ===== 等待特效 ===== */
+.hourglass-loader {
+    display: inline-block;
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin-bottom: 20px;
+}
+
+.hourglass-loader::before {
+    content: "\23F3";
+    font-size: 64px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    animation: hourglass-spin 2s ease-in-out infinite;
+}
+
+@keyframes hourglass-spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    50% { transform: translate(-50%, -50%) rotate(180deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.pulse-effect { animation: pulse 2s ease-in-out infinite; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.loading-dots::after {
+    content: '';
+    animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+}
+
+/* ===== 響應式 ===== */
+@media (max-width: 768px) {
+    body {
+        padding: 16px;
+    }
+
+    h1 {
+        font-size: 1.7rem;
+    }
+
+    .main-upload-hero {
+        padding: 20px 20px 20px 72px;
+    }
+
+    .main-upload-hero::before,
+    .main-upload-hero::after {
+        width: 56px;
+    }
+
+    .main-upload-hero label {
+        font-size: 0.95rem;
+    }
+
+    .button-group {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .big-button {
+        width: 100%;
+        max-width: 300px;
+    }
+
+    .fx-card {
+        padding: 32px 28px;
+    }
+
+    .custom-modal-container {
+        width: 95%;
+        margin: 20px;
+    }
+
+    .custom-modal-header {
+        padding: 16px 20px;
+    }
+
+    .custom-modal-body {
+        padding: 20px;
+    }
+
+    .custom-modal-footer {
+        padding: 16px 20px;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .modal-btn {
+        width: 100%;
+    }
+}
+
+/* ===== 列印樣式 ===== */
+@media print {
+    * {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    body {
+        background: white;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-size: 12px;
+    }
+
+    .container {
+        max-width: none;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .main-upload-hero,
+    .button-group,
+    .divider,
+    .modal,
+    .custom-modal-overlay,
+    .fx-overlay,
+    .settings-gear,
+    .version-tag {
+        display: none !important;
+    }
+
+    #tipBox {
+        display: none !important;
+    }
+
+    #printArea {
+        margin: 0 !important;
+        padding: 10px !important;
+    }
+
+    #result {
+        box-shadow: none;
+        border: none;
+        page-break-inside: avoid;
+        margin: 0 !important;
+        padding: 10px !important;
+    }
+
+    h1 {
+        color: black;
+        page-break-after: avoid;
+        margin: 0 0 15px 0 !important;
+        padding: 0 !important;
+        text-align: center;
+        font-size: 20px;
+    }
+
+    h1::after {
+        display: none;
+    }
+
+    .section {
+        margin-bottom: 15px;
+    }
+
+    body, p, div {
+        font-size: 12px;
+        line-height: 1.4;
+    }
+}
+
+/* ===== 尊重使用者偏好：reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>佳里區衛生所<br>疫苗掛號對針統計系統</h1>
+
+        <form>
+            <!-- ===== 主上傳區塊：流感系統（NIIS）夾帶後自動統計 ===== -->
+            <div class="main-upload-hero" id="mainUploadHero">
+                <label for="file1">上傳 流感系統 名單<br>(臺南疫苗系統CSV)<small>夾帶檔案後自動開始統計</small></label>
+                <div class="main-file-input-wrapper" id="mainFileWrapper">
+                    <input type="file" id="file1" accept=".csv" onchange="handleFileSelected()">
+                    <div class="main-file-icon" id="mainFileIcon"></div>
+                </div>
+                <div class="main-file-name" id="mainFileName"></div>
+            </div>
+
+            <div class="button-group">
+                <button type="button" class="big-button print-button" id="printButton" onclick="printPage()">一鍵列印</button>
+                <button type="button" class="big-button send-button" id="sendButton" onclick="showSendModal()">寄給承辦</button>
+            </div>
+        </form>
+
+        <hr class="divider">
+
+        <div id="printArea">
+            <div id="result"></div>
+
+            <div id="blankLine" style="text-align: center; margin-top: 50px; display: none;">
+                <div class="blank-message">以下空白</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 一般通知Modal -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h3 class="modal-title">系統通知</h3>
+            <p id="modal-message"></p>
+            <div style="text-align: center;">
+                <button id="modal-button" class="close-btn" onclick="closeModal()">確認</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 寄給承辦確認Modal -->
+    <div id="sendModal" class="modal">
+        <div class="modal-content" style="max-width: 600px; width: 90%;">
+            <h3 class="modal-title">寄送確認</h3>
+            <p>是否確定將統計結果寄給承辦人員?</p>
+
+            <div style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <label style="font-weight: bold; color: #2c3e50;">收件人列表：</label>
+                    <button onclick="addEmailField()" style="background: #27ae60; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">+ 新增</button>
+                </div>
+                <div id="emailList" style="max-height: 200px; overflow-y: auto;"></div>
+            </div>
+
+            <textarea class="note-textarea" id="emailNote" placeholder="請輸入備註說明（選填）..." style="margin-top: 15px;"></textarea>
+            <div style="margin-top: 20px;">
+                <button class="confirm-btn" onclick="sendEmail()">確認寄送</button>
+                <button class="cancel-btn" onclick="closeSendModal()">返回</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 異常人員Modal -->
+    <div id="customModal" class="custom-modal-overlay">
+        <div class="custom-modal-container">
+            <div class="custom-modal-header">
+                <h2 id="customModalTitle">系統通知</h2>
+                <button class="custom-modal-close" onclick="closeConflictModal()">&times;</button>
+            </div>
+            <div class="custom-modal-body">
+                <div id="customModalContent"></div>
+            </div>
+            <div class="custom-modal-footer">
+                <div id="customModalButtons"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 疫苗辨識設定Modal -->
+    <div id="settingsModal" class="custom-modal-overlay">
+        <div class="custom-modal-container" style="max-width: 1080px; width: 96%;">
+            <div class="custom-modal-header">
+                <h2>⚙️ 疫苗辨識設定</h2>
+                <button class="custom-modal-close" onclick="closeSettings()">&times;</button>
+            </div>
+            <div class="custom-modal-body">
+                <div class="settings-help">
+                    <strong>辨識代號</strong>以逗號分隔，可填多組（不分大小寫）：<br>
+                    ・<code>XFG</code>＝欄位<b>包含</b> XFG　・<code>21+PCV</code>＝<b>同時包含</b> 21 與 PCV　・<code>=NV</code>＝<b>完全等於</b> NV<br>
+                    系統自動以「較精確（較長）的代號」優先判定，不必在意群組順序。<br>
+                    <strong>類別</strong>決定名單分組段落（新冠+流感、僅肺鏈…）；<strong>標記</strong>會顯示在人名後面，如 (M)、(21)。<br>
+                    按「複製」可以以現有群組為底新增辨識群組（含針數區塊）。儲存後立即重新統計。
+                </div>
+                <div id="settingsList"></div>
+            </div>
+            <div class="custom-modal-footer">
+                <button class="modal-btn modal-btn-danger" data-tip="移除所有自訂修改&#10;立即恢復系統內建六組規則&#10;並清除舊統計結果重新計算" onclick="resetSettings()">還原預設</button>
+                <button class="modal-btn modal-btn-secondary" onclick="closeSettings()">取消</button>
+                <button class="modal-btn modal-btn-primary" data-tip="儲存至雲端（全所共用）&#10;舊統計結果將清除&#10;已夾帶檔案會自動以新規則重新統計" onclick="saveSettings()">儲存設定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 自訂確認彈窗（取代瀏覽器原生 confirm） -->
+    <div id="confirmModal" class="fx-overlay">
+        <div class="fx-card" style="max-width: 440px;">
+            <div class="fx-icon" id="confirmIcon"></div>
+            <div class="fx-title" id="confirmTitle"></div>
+            <div class="fx-sub" id="confirmMsg"></div>
+            <div class="confirm-actions">
+                <button type="button" class="modal-btn modal-btn-secondary" onclick="closeConfirm()">取消</button>
+                <button type="button" class="modal-btn modal-btn-danger" onclick="confirmOk()">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 設定齒輪按鈕 -->
+    <button type="button" class="settings-gear" data-tip="疫苗辨識設定&#10;檢視／編輯各疫苗的辨識代號&#10;可複製群組新增新疫苗" onclick="openSettings()"><span class="gear-ico">⚙️</span></button>
+
+    <!-- 浮標提示浮層（JS 定位） -->
+    <div id="tipBox"></div>
+
+    <!-- 全螢幕動畫回饋彈窗 -->
+    <div id="fxOverlay" class="fx-overlay">
+        <div class="fx-card">
+            <div class="fx-icon" id="fxIcon"></div>
+            <div class="fx-title" id="fxTitle"></div>
+            <div class="fx-sub" id="fxSub"></div>
+        </div>
+    </div>
+
+    <!-- 版本編號顯示 -->
+    <div class="version-tag">v3.4</div>
+
+    <script>
+        var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
+        var hasResult = false;    // 是否已有統計結果
+
+        /* ===== 全螢幕動畫回饋 =====
+           kind: 'loading' | 'success' | 'error' | 'emoji'（emoji 由第 5 參數指定） */
+        var fxHideTimer = null;
+
+        function showFx(kind, title, sub, autoHideMs, emoji) {
+            var overlay = document.getElementById('fxOverlay');
+            var icon = document.getElementById('fxIcon');
+            clearTimeout(fxHideTimer);
+            overlay.classList.remove('hide');
+
+            var iconHtml = '';
+            if (kind === 'loading') {
+                iconHtml = '<div class="fx-spinner"></div>';
+            } else if (kind === 'success') {
+                iconHtml = '<svg class="fx-check" viewBox="0 0 52 52">' +
+                    '<circle class="fx-check-circle" cx="26" cy="26" r="24" fill="none"/>' +
+                    '<path class="fx-check-mark" fill="none" d="M14 27l8 8 16-16"/></svg>';
+            } else if (kind === 'error') {
+                iconHtml = '<svg class="fx-cross" viewBox="0 0 52 52">' +
+                    '<circle class="fx-cross-circle" cx="26" cy="26" r="24" fill="none"/>' +
+                    '<path class="fx-cross-mark" fill="none" d="M17 17l18 18"/>' +
+                    '<path class="fx-cross-mark fx-cross-mark2" fill="none" d="M35 17l-18 18"/></svg>';
+            } else {
+                iconHtml = '<div class="fx-emoji">' + (emoji || 'ℹ️') + '</div>';
+            }
+            icon.className = 'fx-icon' + (kind === 'success' ? ' success' : '');
+            icon.innerHTML = iconHtml;
+            document.getElementById('fxTitle').textContent = title || '';
+            document.getElementById('fxSub').textContent = sub || '';
+
+            var card = overlay.querySelector('.fx-card');
+            card.classList.remove('fx-shake');
+            if (kind === 'error') {
+                void card.offsetWidth;
+                card.classList.add('fx-shake');
+            }
+
+            overlay.classList.add('show');
+            if (autoHideMs) fxHideTimer = setTimeout(hideFx, autoHideMs);
+        }
+
+        function hideFx() {
+            var overlay = document.getElementById('fxOverlay');
+            if (!overlay.classList.contains('show')) return;
+            overlay.classList.add('hide');
+            setTimeout(function() {
+                overlay.classList.remove('show');
+                overlay.classList.remove('hide');
+            }, 280);
+        }
+
+        /* ===== 檔案夾帶 → 自動統計 ===== */
+        function handleFileSelected() {
+            var input = document.getElementById('file1');
+            var file = input.files[0];
+            if (!file) return;
+            input.value = '';  // 清空 input，讓同一檔案可重新夾帶再次觸發統計
+
+            var nameLower = file.name.toLowerCase();
+            if (!nameLower.endsWith('.csv')) {
+                showFx('error', '檔案格式錯誤', '請選擇 CSV 格式的檔案！', 2400);
+                resetMainUpload();
+                return;
+            }
+            if (nameLower.indexOf('niis') === -1) {
+                showFx('error', '檔案名稱錯誤', "請確認檔案名稱包含 'NIIS' 字樣", 2800);
+                resetMainUpload();
+                return;
+            }
+
+            currentFile = file;
+            document.getElementById('mainFileWrapper').classList.add('file-selected');
+            document.getElementById('mainFileIcon').textContent = '✓';
+            document.getElementById('mainFileName').textContent = file.name;
+
+            startStatistics(file);
+        }
+
+        function resetMainUpload() {
+            currentFile = null;
+            document.getElementById('mainFileWrapper').classList.remove('file-selected');
+            document.getElementById('mainFileIcon').textContent = '';
+            document.getElementById('mainFileName').textContent = '';
+        }
+
+        function resetResultArea() {
+            hasResult = false;
+            document.getElementById('result').innerHTML = '';
+            document.getElementById('printButton').style.display = 'none';
+            document.getElementById('sendButton').style.display = 'none';
+            document.getElementById('blankLine').style.display = 'none';
+        }
+
+        function startStatistics(file) {
+            resetResultArea();
+            showFx('loading', '統計中', '正在讀取並比對名單…');
+            document.getElementById('result').innerHTML =
+                '<div class="empty-state"><div class="hourglass-loader"></div>' +
+                '<div class="empty-state-text pulse-effect">正在處理檔案<span class="loading-dots"></span></div></div>';
+
+            readFileAsText(file, 'big5').then(function(content) {
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        if (result.errorMessage) {
+                            showFx('error', '統計失敗', result.errorMessage, 3200);
+                            resetResultArea();
+                            resetMainUpload();
+                            return;
+                        }
+                        if (result.needUserInput) {
+                            hideFx();
+                            resetResultArea();
+                            showConflictModal(result);
+                            return;
+                        }
+                        displayResult(result.htmlContent);
+                        hasResult = true;
+                        document.getElementById('printButton').style.display = 'inline-block';
+                        document.getElementById('sendButton').style.display = 'inline-block';
+                        document.getElementById('blankLine').style.display = 'block';
+                        hideFx();  // 統計完成立即呈現數據，不彈完成視窗
+
+                        if (result.nonCoronaCount > 0) {
+                            showNonCoronaModal(result);
+                        }
+                    })
+                    .withFailureHandler(function(error) {
+                        showFx('error', '處理過程中發生錯誤', (error && error.message) || String(error), 3600);
+                        resetResultArea();
+                    })
+                    .compareCSVFiles(content, file.name);
+            }).catch(function(error) {
+                showFx('error', '讀取檔案時發生錯誤', String(error), 3200);
+                resetResultArea();
+            });
+        }
+
+        function readFileAsText(file, encoding) {
+            return new Promise(function(resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function(e) { resolve(e.target.result); };
+                reader.onerror = function(e) { reject(e); };
+                reader.readAsText(file, encoding);
+            });
+        }
+
+        /* ===== 顯示結果 ===== */
+        function displayResult(htmlContent) {
+            document.getElementById('result').innerHTML = htmlContent;
+            addNeedleAdjustmentFeatures();
+        }
+
+        /* ===== 異常人員彈窗（重複掛號 / 疫苗衝突） ===== */
+        function showConflictModal(result) {
+            var modal = document.getElementById('customModal');
+            var isDup = result.errorType === 'duplicate_vaccine';
+            document.getElementById('customModalTitle').textContent = isDup ? '同人同疫苗重複掛號' : '疫苗異常確認';
+
+            var html = '<div><div style="margin-bottom: 15px; color: #e74c3c; font-weight: bold;">' +
+                (result.message || '發現疫苗異常人員，請至系統手動排除：') + '</div>';
+            (result.errorPersons || []).forEach(function(p) {
+                html += '<div class="person-card">' +
+                    '<div class="person-name">' + p.name + '</div>' +
+                    (p.errorType ? '<div class="person-error">' + p.errorType + '</div>' : '') +
+                    (p.description ? '<div class="person-description">' + p.description + '</div>' : '') +
+                    '</div>';
+            });
+            html += '</div>';
+
+            document.getElementById('customModalContent').innerHTML = html;
+            document.getElementById('customModalButtons').innerHTML =
+                '<button class="modal-btn modal-btn-danger" onclick="closeConflictModal()">返回</button>' +
+                '<button class="modal-btn modal-btn-primary" onclick="printConflictList()">列印清單</button>';
+
+            window.lastConflictResult = result;
+            modal.classList.add('show');
+        }
+
+        function closeConflictModal() {
+            document.getElementById('customModal').classList.remove('show');
+            resetMainUpload();
+            showModal('請至系統退掛相關人員後，重新夾帶檔案統計。');
+        }
+
+        function printConflictList() {
+            var result = window.lastConflictResult;
+            if (!result) return;
+            document.getElementById('customModal').classList.remove('show');
+
+            var listHTML = '<div style="padding: 20px; font-family: \'Noto Sans TC\', sans-serif;">';
+            listHTML += '<h2 style="color: #e74c3c; text-align: center; margin-bottom: 20px;">疫苗異常人員清單</h2>';
+            (result.errorPersons || []).forEach(function(p) {
+                listHTML += '<div style="border: 1px solid #e74c3c; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: #ffebee;">';
+                listHTML += '<div style="font-weight: bold; font-size: 16px; color: #c62828;">' + p.name + '</div>';
+                if (p.errorType) listHTML += '<div style="color: #d32f2f; margin: 5px 0;">' + p.errorType + '</div>';
+                if (p.description) listHTML += '<div style="color: #666; font-size: 14px;">' + p.description + '</div>';
+                listHTML += '</div>';
+            });
+            listHTML += '<div style="text-align: center; margin-top: 30px; color: #666; font-size: 14px;">請至系統手動處理以上人員</div></div>';
+            listHTML += '<div class="no-print" style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd;">';
+            listHTML += '<button onclick="window.close();" style="background: linear-gradient(135deg, #3498db, #2980b9); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-right: 15px;">關閉</button>';
+            listHTML += '<button onclick="window.print()" style="background: linear-gradient(135deg, #2ecc71, #27ae60); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">列印</button>';
+            listHTML += '</div>';
+
+            var printWindow = window.open('', '_blank');
+            printWindow.document.write('<!DOCTYPE html><html><head><title>疫苗異常人員清單</title><meta charset="UTF-8"><style>body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; padding: 20px; } button:hover { transform: translateY(-2px); } @media print { .no-print { display: none !important; } }</style></head><body>' + listHTML + '</body></html>');
+            printWindow.document.close();
+        }
+
+        /* ===== 非掛號資料提示 ===== */
+        function showNonCoronaModal(result) {
+            var message = '';
+            if (result.nonCoronaDetails && result.nonCoronaDetails.length > 0) {
+                var details = result.nonCoronaDetails;
+                var shown = Math.min(details.length, 3);
+                for (var i = 0; i < shown; i++) {
+                    message += details[i].name + ' 的 ' + details[i].type + ' 無法辨識';
+                    if (i < shown - 1) message += '；';
+                }
+                message += '\n' + (details.length <= 3 ? '共 ' : '等 ') + result.nonCoronaCount + ' 筆資料已忽略';
+            } else {
+                message = '共有 ' + result.nonCoronaCount + ' 筆csv檔的非掛號資料已忽略';
+            }
+            showModal(message);
+        }
+
+        /* ===== 一鍵列印 ===== */
+        function printPage() {
+            if (!hasResult) {
+                showFx('error', '尚無統計結果', '請先夾帶 NIIS 名單完成統計', 2400);
+                return;
+            }
+            showFx('emoji', '準備列印', '', 0, '🖨️');
+            setTimeout(function() {
+                hideFx();
+                setTimeout(function() { window.print(); }, 120);
+            }, 350);
+        }
+
+        /* ===== 寄給承辦 ===== */
+        var emailList = [];
+
+        function showSendModal() {
+            if (!hasResult) {
+                showFx('error', '尚無統計結果', '請先夾帶 NIIS 名單完成統計', 2400);
+                return;
+            }
+            document.getElementById("sendModal").style.display = "flex";
+            google.script.run
+                .withSuccessHandler(function(email) {
+                    emailList = email.split(',').map(function(e) { return e.trim(); }).filter(function(e) { return e; });
+                    renderEmailList();
+                })
+                .withFailureHandler(function() {
+                    emailList = ['a00820@tncghb.gov.tw'];
+                    renderEmailList();
+                })
+                .getRecipientEmail();
+            document.getElementById("emailNote").focus();
+        }
+
+        function renderEmailList() {
+            var container = document.getElementById('emailList');
+            container.innerHTML = '';
+            emailList.forEach(function(email, index) {
+                var row = document.createElement('div');
+                row.style.cssText = 'display: flex; align-items: center; margin-bottom: 10px; padding: 8px; background: white; border-radius: 4px; border: 1px solid #e0e0e0;';
+                row.innerHTML = '<input type="email" value="' + email + '" onchange="updateEmail(' + index + ', this.value)" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; margin-right: 10px; font-size: 14px;" placeholder="請輸入 Email 地址">' +
+                    '<button onclick="removeEmail(' + index + ')" style="background: #e74c3c; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">刪除</button>';
+                container.appendChild(row);
+            });
+        }
+
+        function addEmailField() { emailList.push(''); renderEmailList(); }
+
+        function removeEmail(index) {
+            if (emailList.length > 1) { emailList.splice(index, 1); renderEmailList(); }
+            else showModal('至少需要保留一個收件人！');
+        }
+
+        function updateEmail(index, value) { emailList[index] = value.trim(); }
+
+        function validateEmails() {
+            var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            var valid = [], invalid = [];
+            emailList.forEach(function(e) {
+                if (e.trim()) {
+                    if (emailRegex.test(e.trim())) valid.push(e.trim());
+                    else invalid.push(e.trim());
+                }
+            });
+            if (invalid.length > 0) { showModal('以下 Email 地址格式不正確：\n' + invalid.join('\n')); return false; }
+            if (valid.length === 0) { showModal('請至少輸入一個有效的 Email 地址！'); return false; }
+            return valid;
+        }
+
+        function closeSendModal() { document.getElementById("sendModal").style.display = "none"; }
+
+        function sendEmail() {
+            var validEmails = validateEmails();
+            if (!validEmails) return;
+            var note = document.getElementById("emailNote").value;
+            closeSendModal();
+            showFx('loading', '寄送中', '正在產生 PDF 報告並寄送郵件…');
+
+            var proceed = function(fileContents) {
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        if (result.success) {
+                            showFx('success', '郵件發送成功', '已寄送給：' + validEmails.join('、'), 2800);
+                        } else {
+                            showFx('error', '郵件發送失敗', result.error || '未知錯誤', 4000);
+                        }
+                    })
+                    .withFailureHandler(function(error) {
+                        showFx('error', '郵件發送失敗', (error && error.message) || String(error), 4000);
+                    })
+                    .sendEmailWithAttachments(document.getElementById('result').innerHTML, note, fileContents, validEmails);
+            };
+
+            if (currentFile) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    proceed([{ name: '流感系統名單_' + currentFile.name, content: e.target.result.split(',')[1] }]);
+                };
+                reader.onerror = function() { proceed([]); };
+                reader.readAsDataURL(currentFile);
+            } else {
+                proceed([]);
+            }
+        }
+
+        /* ===== 一般通知Modal ===== */
+        function showModal(message) {
+            document.getElementById("modal").style.display = "flex";
+            document.getElementById("modal-message").textContent = message;
+            var btn = document.getElementById("modal-button");
+            btn.textContent = "確認";
+            btn.onclick = closeModal;
+        }
+
+        function closeModal() { document.getElementById("modal").style.display = "none"; }
+
+        /* ===== 針數調整 ===== */
+        var originalNeedleCounts = {};
+
+        function addNeedleAdjustmentFeatures() {
+            originalNeedleCounts = {};
+            document.querySelectorAll('.adjustment-input-field').forEach(function(input) {
+                var type = input.id.replace('Adjustment', '');
+                var span = document.getElementById(type + 'NeedleCount');
+                if (!span) return;
+                var m = span.textContent.match(/(\d+)\s*針/);
+                if (!m) return;
+                originalNeedleCounts[type] = { base: parseInt(m[1], 10), adjustment: 0 };
+            });
+        }
+
+        function adjustCount(type, delta) {
+            if (!originalNeedleCounts[type]) return;
+            var input = document.getElementById(type + 'Adjustment');
+            if (!input) return;
+            originalNeedleCounts[type].adjustment += delta;
+            input.value = originalNeedleCounts[type].adjustment;
+            updateNeedleDisplay(type);
+        }
+
+        function updateCount(type) {
+            if (!originalNeedleCounts[type]) return;
+            var input = document.getElementById(type + 'Adjustment');
+            if (!input) return;
+            originalNeedleCounts[type].adjustment = parseInt(input.value, 10) || 0;
+            updateNeedleDisplay(type);
+        }
+
+        function updateNeedleDisplay(type) {
+            var data = originalNeedleCounts[type];
+            if (!data) return;
+            var span = document.getElementById(type + 'NeedleCount');
+            if (!span) return;
+
+            var adj = data.adjustment;
+            var html = "<span style='color:#27ae60;font-weight:bold;'>" + data.base + "</span>";
+            if (adj !== 0) {
+                html += (adj > 0 ? '+' : '-') + "<span style='color:#e74c3c;font-weight:bold;'>" + Math.abs(adj) + "</span>";
+            }
+            html += ' 針';
+            span.innerHTML = html;
+
+            span.setAttribute('data-tip',
+                'NIIS 名單統計：' + data.base + ' 針\n' +
+                '手動修正：' + (adj > 0 ? '+' : '') + adj + ' 針\n' +
+                '合計：' + (data.base + adj) + ' 針');
+
+            if (adj !== 0) span.classList.add('modified');
+            else span.classList.remove('modified');
+
+            // 數字更新 flash 高亮
+            span.classList.remove('flash');
+            void span.offsetWidth;
+            span.classList.add('flash');
+            setTimeout(function() { span.classList.remove('flash'); }, 950);
+        }
+
+        /* ===== +/- 按鈕點擊漣漪 ===== */
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.adjust-btn');
+            if (btn) {
+                btn.classList.remove('ripple');
+                void btn.offsetWidth;
+                btn.classList.add('ripple');
+                setTimeout(function() { btn.classList.remove('ripple'); }, 600);
+            }
+        }, true);
+
+        /* ===== 浮標提示引擎（JS 固定定位，不被彈窗捲動區遮擋） ===== */
+        var tipTarget = null;
+
+        function hideTip() {
+            tipTarget = null;
+            var tip = document.getElementById('tipBox');
+            tip.classList.remove('show');
+            tip.classList.remove('on');
+        }
+
+        function positionTip(target) {
+            var tip = document.getElementById('tipBox');
+            var r = target.getBoundingClientRect();
+            tip.style.left = '0px';
+            tip.style.top = '0px';
+            var tw = tip.offsetWidth;
+            var th = tip.offsetHeight;
+            var x = r.left + r.width / 2 - tw / 2;
+            x = Math.max(8, Math.min(x, window.innerWidth - tw - 8));   // 貼齊視窗左右邊界
+            var y = r.top - th - 10;                                    // 預設顯示在上方
+            if (y < 8) y = r.bottom + 10;                               // 上方放不下改下方
+            if (y + th > window.innerHeight - 8) y = Math.max(8, window.innerHeight - th - 8);
+            tip.style.left = x + 'px';
+            tip.style.top = y + 'px';
+        }
+
+        document.addEventListener('mouseover', function(e) {
+            var t = (e.target && e.target.closest) ? e.target.closest('[data-tip]') : null;
+            if (t === tipTarget) return;
+            tipTarget = t;
+            var tip = document.getElementById('tipBox');
+            if (!t) { tip.classList.remove('show'); tip.classList.remove('on'); return; }
+            tip.textContent = t.getAttribute('data-tip') || '';
+            tip.classList.add('show');
+            positionTip(t);
+            void tip.offsetWidth;
+            tip.classList.add('on');
+        });
+
+        // 捲動或點擊時收起，避免浮標飄離目標
+        document.addEventListener('scroll', hideTip, true);
+        document.addEventListener('mousedown', hideTip, true);
+
+        /* ===== 疫苗辨識設定 ===== */
+        var settingsGroups = null;
+
+        function escAttr(s) {
+            return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        }
+
+        function openSettings() {
+            document.getElementById('settingsModal').classList.add('show');
+            document.getElementById('settingsList').innerHTML =
+                '<div class="empty-state"><div class="hourglass-loader"></div>' +
+                '<div class="empty-state-text pulse-effect">載入設定中<span class="loading-dots"></span></div></div>';
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    settingsGroups = (res && res.groups) || [];
+                    renderSettings();
+                })
+                .withFailureHandler(function(err) {
+                    document.getElementById('settingsModal').classList.remove('show');
+                    showFx('error', '無法載入設定', (err && err.message) || String(err), 3200);
+                })
+                .getVaccineConfig();
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.remove('show');
+        }
+
+        function renderSettings() {
+            var TIP_LABEL = '針數區塊的標題文字&#10;會顯示在統計結果與列印報表上&#10;例：新冠針數 (Moderna)';
+            var TIP_FAMILY = '此疫苗所屬的大類&#10;決定名單分組段落（新冠+流感、僅肺鏈…）&#10;以及「同類重複掛號」的異常檢查';
+            var TIP_INDICATOR = '顯示在人名後面的小標籤&#10;例：(M)、(N)、(21)&#10;留空＝不顯示標記（如流感）';
+            var TIP_CODES = 'NIIS 疫苗欄位(K欄)的辨識代號&#10;以逗號分隔、可填多組、不分大小寫&#10;XFG＝欄位包含 XFG 即符合&#10;21+PCV＝需同時包含 21 與 PCV&#10;=NV＝需完全等於 NV&#10;較長（較精確）的代號自動優先，不必在意順序';
+            var TIP_COPY = '以此群組為範本新增一組&#10;改名稱與代號即成新疫苗&#10;例：複製 21PCV 改成 24PCV';
+            var TIP_DEL = '移除此群組&#10;按「儲存設定」後才會生效';
+            var html = '';
+            settingsGroups.forEach(function(g, i) {
+                html += '<div class="settings-row">';
+                html += '<div class="settings-row-head">';
+                html += '<div class="s-field s-field-grow" data-tip="' + TIP_LABEL + '"><span class="s-cap">顯示名稱</span>';
+                html += '<input class="s-input s-label" id="sLabel' + i + '" value="' + escAttr(g.label) + '" placeholder="例：新冠針數 (Moderna)"></div>';
+                html += '<div class="s-field" data-tip="' + TIP_FAMILY + '"><span class="s-cap">類別</span>';
+                html += '<select class="s-input s-family" id="sFamily' + i + '">';
+                html += '<option value="corona"' + (g.family === 'corona' ? ' selected' : '') + '>新冠</option>';
+                html += '<option value="flu"' + (g.family === 'flu' ? ' selected' : '') + '>流感</option>';
+                html += '<option value="lung"' + (g.family === 'lung' ? ' selected' : '') + '>肺鏈</option>';
+                html += '</select></div>';
+                html += '<div class="s-field" data-tip="' + TIP_INDICATOR + '"><span class="s-cap">標記</span>';
+                html += '<input class="s-input s-indicator" id="sIndicator' + i + '" value="' + escAttr(g.indicator || '') + '" placeholder="(M)"></div>';
+                html += '<div class="s-field"><span class="s-cap">&nbsp;</span><div class="s-actions">';
+                html += '<button type="button" class="s-btn s-copy" data-tip="' + TIP_COPY + '" onclick="duplicateGroup(' + i + ')">複製</button>';
+                html += '<button type="button" class="s-btn s-del" data-tip="' + TIP_DEL + '" onclick="deleteGroup(' + i + ')">刪除</button>';
+                html += '</div></div>';
+                html += '</div>';
+                html += '<div class="s-field s-field-codes" data-tip="' + TIP_CODES + '"><span class="s-cap">辨識代號</span>';
+                html += '<input class="s-input s-codes" id="sCodes' + i + '" value="' + escAttr((g.codes || []).join(', ')) + '" placeholder="例：XFG, MO, LP　（A+B＝同時包含；=X＝完全等於）"></div>';
+                html += '</div>';
+            });
+            document.getElementById('settingsList').innerHTML = html;
+        }
+
+        // 將畫面輸入值讀回 settingsGroups
+        function collectSettings() {
+            settingsGroups.forEach(function(g, i) {
+                var labelEl = document.getElementById('sLabel' + i);
+                if (!labelEl) return;
+                g.label = labelEl.value.trim();
+                g.family = document.getElementById('sFamily' + i).value;
+                g.indicator = document.getElementById('sIndicator' + i).value.trim();
+                g.codes = document.getElementById('sCodes' + i).value
+                    .split(',')
+                    .map(function(s) { return s.trim(); })
+                    .filter(function(s) { return s; });
+            });
+        }
+
+        function duplicateGroup(i) {
+            collectSettings();
+            var copy = JSON.parse(JSON.stringify(settingsGroups[i]));
+            copy.key = 'g' + Date.now();
+            copy.label = settingsGroups[i].label + ' (新)';
+            settingsGroups.splice(i + 1, 0, copy);
+            renderSettings();
+        }
+
+        function deleteGroup(i) {
+            if (settingsGroups.length <= 1) { showModal('至少需保留一個辨識群組！'); return; }
+            collectSettings();
+            showConfirm('刪除辨識群組',
+                '確定刪除「' + settingsGroups[i].label + '」？\n刪除後需按「儲存設定」才會生效。',
+                function() {
+                    settingsGroups.splice(i, 1);
+                    renderSettings();
+                }, '🗑️');
+        }
+
+        function resetSettings() {
+            showConfirm('還原預設設定',
+                '將移除所有自訂群組，\n立即恢復系統內建規則並重新統計。',
+                function() {
+                    google.script.run
+                        .withSuccessHandler(function(res) {
+                            settingsGroups = (res && res.groups) || [];
+                            renderSettings();
+                            resetResultArea();  // 舊規則算出的結果作廢
+                            if (currentFile) {
+                                startStatistics(currentFile);
+                            } else {
+                                showFx('success', '已還原預設設定', '請夾帶 NIIS 檔案重新統計', 2400);
+                            }
+                        })
+                        .withFailureHandler(function(err) {
+                            showFx('error', '還原失敗', (err && err.message) || String(err), 3200);
+                        })
+                        .resetVaccineConfig();
+                }, '♻️');
+        }
+
+        function saveSettings() {
+            collectSettings();
+            for (var i = 0; i < settingsGroups.length; i++) {
+                var g = settingsGroups[i];
+                if (!g.label) { showModal('第 ' + (i + 1) + ' 個群組的名稱不可空白！'); return; }
+                if (!g.codes || g.codes.length === 0) { showModal('「' + g.label + '」的辨識代號不可空白！'); return; }
+            }
+            closeSettings();
+            showFx('loading', '儲存設定中', '');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res && res.success) {
+                        resetResultArea();  // 強制清除舊規則的統計結果
+                        if (currentFile) {
+                            startStatistics(currentFile);  // 立即用新規則重新統計
+                        } else {
+                            showFx('success', '設定已儲存', '請夾帶 NIIS 檔案開始統計', 2400);
+                        }
+                    } else {
+                        showFx('error', '儲存失敗', (res && res.error) || '未知錯誤', 3600);
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    showFx('error', '儲存失敗', (err && err.message) || String(err), 3600);
+                })
+                .saveVaccineConfig(settingsGroups);
+        }
+
+        /* ===== 自訂確認彈窗（取代瀏覽器原生 confirm） ===== */
+        var confirmCallback = null;
+
+        function showConfirm(title, message, onConfirm, emoji) {
+            document.getElementById('confirmIcon').innerHTML = '<div class="fx-emoji">' + (emoji || '❓') + '</div>';
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMsg').textContent = message;
+            confirmCallback = onConfirm;
+            var m = document.getElementById('confirmModal');
+            m.classList.remove('hide');
+            m.classList.add('show');
+        }
+
+        function closeConfirm() {
+            confirmCallback = null;
+            var m = document.getElementById('confirmModal');
+            if (!m.classList.contains('show')) return;
+            m.classList.add('hide');
+            setTimeout(function() {
+                m.classList.remove('show');
+                m.classList.remove('hide');
+            }, 280);
+        }
+
+        function confirmOk() {
+            var cb = confirmCallback;
+            closeConfirm();
+            if (cb) cb();
+        }
+    </script>
+</body>
+</html>
