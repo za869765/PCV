@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.1)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.2)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -37,6 +37,15 @@
  * v4.1 變更（HIS 加計醒目標示）：
  *  - HIS 加計者：名字加底線＋名字後紅色粗體「＊」標記，與 NIIS 名單者明顯區分；
  *    佔版面極小（上百人名單也不擠）；浮標顯示來源檔；統計列加圖例說明
+ * v4.2 變更（產檔面板全螢幕＋自動判讀設定）：
+ *  - 產檔面板改全螢幕；結存量檔改主頁同款夾帶區（夾帶即自動解析＋動畫回饋）
+ *  - 接種機構代碼僅檢視；接種日期改日期選擇器（即時顯示民國換算，預設上個週四）
+ *  - 移除新冠備援/流感預設輸入框，改齒輪「身分別自動判讀設定」面板（存雲端）：
+ *    新冠年齡對照表 7 區間代碼、流感所內/外設代號（F03A/F03B）、公費門檻
+ *    （特別月份預設 10 月＝65 歲、其他月份＝50 歲，皆可設定）
+ *  - 流感容器：外設站切換（F03A↔F03B）；名單勾選＋批次套用；年齡不符公費門檻
+ *    → 紅底＋浮標原因，未拉選例外身分別前「產生並下載」前後端皆擋
+ *  - 新冠缺出生日期改為直接列名擋下（HIS 檔必有出生年，備援代號取消）
  */
 
 function doGet() {
@@ -389,11 +398,27 @@ var FLU_TARGET_NAMES = {
 // 媒體資料上傳範本 24 欄表頭（NIIS 官方格式）
 var NIIS_EXPORT_HEADER = '幼兒身分證號,嬰幼兒姓名,嬰幼兒性別,(必填)幼兒出生日期,同胎次序,通訊地址,電話,父或母身分證號,(必填)接種機構,(必填)接種日期,(必填)疫苗種類,(必填)疫苗劑別,(必填)疫苗批號,疫苗廠商,(必填)疫苗型別,曾接種流感疫苗,身分別,接種站識別碼,期別,時段,醫師,接種位址,接種站名稱,處置費註記(非必填)';
 
-// 預設值取自 2026-08 實際匯入成功案例（C11＝新冠身分別；批號來自結存量檔）
+// 新冠年齡對照表預設（附件：COVID-19 身分別代碼，依接種對象之年齡）
+function getDefaultCovidTable() {
+  return [
+    { label: '0-4 歲（6個月以上）', max: 4,   code: 'C15' },
+    { label: '5-11 歲',            max: 11,  code: 'C14' },
+    { label: '12-17 歲',           max: 17,  code: 'C17' },
+    { label: '18-49 歲',           max: 49,  code: 'C12' },
+    { label: '50-64 歲',           max: 64,  code: 'C10' },
+    { label: '65-74 歲',           max: 74,  code: 'C11' },
+    { label: '75 歲以上',          max: 999, code: 'C08A' }
+  ];
+}
+
+// 預設值取自 2026-08 實際匯入成功案例（批號來自結存量檔）
 function getDefaultNiisExportConfig() {
   return {
     org: '2341050013',
-    idCodes: { corona: 'C11', flu: '' },
+    idCodes: { fluIn: 'F03A', fluOut: 'F03B' },
+    covidTable: getDefaultCovidTable(),
+    // 流感公費門檻：特別月份（10月）需滿 specialMinAge，其他月份滿 normalMinAge
+    fluRule: { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 },
     batches: [
       { type: 'CoV_Moderna_LP', lot: '3053857_1150826-CDC', exp: '1150826', qty: '', family: 'corona' },
       { type: '20PCV', lot: 'ND3093-CDC', exp: '1160430', qty: '', family: 'lung' },
@@ -409,7 +434,7 @@ function getNiisExportConfig() {
     var raw = PropertiesService.getScriptProperties().getProperty('niisExportConfig');
     if (raw) {
       var parsed = JSON.parse(raw);
-      if (parsed && parsed.batches) return parsed;
+      if (parsed && parsed.batches) return cleanNiisExportConfig(parsed);   // 順帶補齊舊版缺欄位
     }
   } catch (e) {
     // 設定損壞時回退預設
@@ -419,15 +444,37 @@ function getNiisExportConfig() {
 
 function cleanNiisExportConfig(cfg) {
   cfg = cfg || {};
+  var def = getDefaultNiisExportConfig();
+  var idc = cfg.idCodes || {};
   var clean = {
-    org: String(cfg.org || '').trim().slice(0, 20),
+    org: String(cfg.org || '').trim().slice(0, 20) || def.org,
     idCodes: {
-      corona: String((cfg.idCodes || {}).corona || '').trim().slice(0, 10).toUpperCase(),
-      flu: String((cfg.idCodes || {}).flu || '').trim().slice(0, 10).toUpperCase()
+      // 舊版欄位 flu 遷移為 fluIn
+      fluIn: String(idc.fluIn || idc.flu || 'F03A').trim().slice(0, 10).toUpperCase(),
+      fluOut: String(idc.fluOut || 'F03B').trim().slice(0, 10).toUpperCase()
     },
+    covidTable: [],
+    fluRule: (function(fr) {
+      // 允許門檻 0 歲（不限齡），只有空/非數字才回預設
+      function num(v, d) { var n = parseInt(v, 10); return isNaN(n) ? d : n; }
+      return {
+        specialMonth: num(fr.specialMonth, 10) || 10,
+        specialMinAge: num(fr.specialMinAge, 65),
+        normalMinAge: num(fr.normalMinAge, 50)
+      };
+    })(cfg.fluRule || {}),
     batches: [],
     lastPick: {}
   };
+  if (clean.fluRule.specialMonth < 1 || clean.fluRule.specialMonth > 12) clean.fluRule.specialMonth = 10;
+  var srcTable = (cfg.covidTable && cfg.covidTable.length === 7) ? cfg.covidTable : def.covidTable;
+  for (var t = 0; t < 7; t++) {
+    clean.covidTable.push({
+      label: def.covidTable[t].label,
+      max: def.covidTable[t].max,
+      code: String((srcTable[t] || {}).code || def.covidTable[t].code).trim().slice(0, 10).toUpperCase()
+    });
+  }
   var list = cfg.batches || [];
   var seen = {};
   for (var i = 0; i < list.length && clean.batches.length < 100; i++) {
@@ -511,6 +558,26 @@ function csvField(v) {
   return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 }
 
+// 前端產檔面板用：NIIS 名單中「流感類別」的身分證集合（與加計/略過邏輯同一套辨識設定）
+function getNiisFluIds(jnContent) {
+  try {
+    if (!jnContent) return {};
+    var config = getVaccineConfigList();
+    var keyFam = {};
+    for (var g = 0; g < config.length; g++) keyFam[config[g].key] = config[g].family;
+    var data = analyzeNIIS(jnContent, config);
+    var out = {};
+    for (var id in data.idCategoryCount) {
+      for (var k in data.idCategoryCount[id]) {
+        if (keyFam[k] === 'flu') { out[id] = true; break; }
+      }
+    }
+    return out;
+  } catch (e) {
+    return {};
+  }
+}
+
 // 民國日期字串取「年」：'0420910'→42、'480327'→48、'1100315'→110
 function rocYearOf(roc) {
   roc = String(roc || '').replace(/\D/g, '');
@@ -519,24 +586,33 @@ function rocYearOf(roc) {
   return isNaN(y) ? null : y;
 }
 
-/**
- * COVID-19 身分別代碼：依接種對象之年齡填寫（只看出生年不看月）
- * 6月-4歲 C15 / 5-11歲 C14 / 12-17歲 C17 / 18-49歲 C12 /
- * 50-64歲 C10 / 65-74歲 C11 / 75歲以上 C08A
- */
-function covidIdentityByAge(birthRoc, vacRoc) {
+// 年齡（只看出生年不看月）：接種年 − 出生年；無法解析回傳 null
+function ageByYear(birthRoc, vacRoc) {
   var by = rocYearOf(birthRoc);
   var vy = rocYearOf(vacRoc);
-  if (by == null || vy == null) return '';
+  if (by == null || vy == null) return null;
   var age = vy - by;
-  if (age < 0) return '';
-  if (age <= 4) return 'C15';
-  if (age <= 11) return 'C14';
-  if (age <= 17) return 'C17';
-  if (age <= 49) return 'C12';
-  if (age <= 64) return 'C10';
-  if (age <= 74) return 'C11';
-  return 'C08A';
+  return age < 0 ? null : age;
+}
+
+/**
+ * COVID-19 身分別代碼：依接種對象之年齡查對照表（表可於設定面板修改）
+ */
+function covidIdentityByAge(birthRoc, vacRoc, table) {
+  var age = ageByYear(birthRoc, vacRoc);
+  if (age == null) return '';
+  table = (table && table.length === 7) ? table : getDefaultCovidTable();
+  for (var i = 0; i < table.length; i++) {
+    if (age <= table[i].max) return table[i].code;
+  }
+  return table[table.length - 1].code;
+}
+
+// 流感公費門檻歲數：接種月份為特別月份（預設10月）→ specialMinAge，否則 normalMinAge
+function fluMinAge(vacRoc, fluRule) {
+  fluRule = fluRule || { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 };
+  var m = parseInt(String(vacRoc || '').slice(3, 5), 10);
+  return (m === fluRule.specialMonth) ? fluRule.specialMinAge : fluRule.normalMinAge;
 }
 
 /**
@@ -549,12 +625,18 @@ function buildNiisExport(phisFiles, jnContent, picks) {
     phisFiles = phisFiles || {};
     picks = picks || {};
     var slotPicks = picks.slots || {};
-    var idCodes = picks.idCodes || {};
     var fluCodes = picks.fluCodes || {};   // 流感每人個別拉選的身分別（id -> F代碼）
     var org = String(picks.org || '').trim();
     var date = String(picks.date || '').trim();
-    if (!org) return { errorMessage: '請填接種機構代碼！' };
+    if (!org) return { errorMessage: '接種機構代碼未設定！' };
     if (!/^\d{7}$/.test(date)) return { errorMessage: '接種日期格式錯誤，請填民國 7 碼（如 1150810）！' };
+
+    // 自動判讀規則：前端帶最新設定，缺漏時回退雲端儲存值
+    var ruleCfg = cleanNiisExportConfig(picks.rules || getNiisExportConfig());
+    var covidTable = ruleCfg.covidTable;
+    var fluRule = ruleCfg.fluRule;
+    var fluDefault = picks.outpost ? ruleCfg.idCodes.fluOut : ruleCfg.idCodes.fluIn;
+    var minAge = fluMinAge(date, fluRule);
 
     var config = getVaccineConfigList();
     var keyFam = {};
@@ -593,16 +675,25 @@ function buildNiisExport(phisFiles, jnContent, picks) {
       var pick = slotPicks[def.slot] || {};
       var slotDose = String(pick.dose || '').trim();
       var slotRows = [];
+      var noBirth = [];      // 新冠缺出生日期（擋下列名）
+      var fluBad = [];       // 流感年齡不符公費門檻且未拉選（擋下列名）
       for (var i = 0; i < ids.length; i++) {
         var pid = ids[i];
         if (niisFam[def.family][pid]) { skipped++; continue; }
         var identity = '';
         if (def.family === 'corona') {
-          // 新冠：一律依年齡自動判斷（只看出生年）；無出生日期才用備援代號
-          identity = covidIdentityByAge(parsed.idBirthMap[pid], date) || idCodes.corona || '';
+          // 新冠：一律依年齡自動判斷（只看出生年，對照表可設定）
+          identity = covidIdentityByAge(parsed.idBirthMap[pid], date, covidTable);
+          if (!identity) noBirth.push(parsed.idNameMap[pid] || pid);
         } else if (def.family === 'flu') {
-          // 流感：前端名單個別拉選優先，未拉選用預設代號
-          identity = fluCodes[pid] || parsed.idIdentMap[pid] || idCodes.flu || '';
+          // 流感：個別拉選優先；未拉選者需符合公費門檻才帶預設（所內/外設）
+          if (fluCodes[pid]) {
+            identity = fluCodes[pid];
+          } else {
+            var fAge = ageByYear(parsed.idBirthMap[pid], date);
+            if (fAge != null && fAge >= minAge) identity = fluDefault;
+            else fluBad.push((parsed.idNameMap[pid] || pid) + (fAge != null ? '（' + fAge + ' 歲）' : '（缺出生）'));
+          }
         }
         // 肺鏈不填身分別
         var sex = parsed.idSexMap[pid] || '';
@@ -617,16 +708,19 @@ function buildNiisExport(phisFiles, jnContent, picks) {
         ]);
         exported.push({ name: parsed.idNameMap[pid] || pid, slot: def.expect });
       }
+      if (noBirth.length > 0) {
+        return { errorMessage: '新冠名單缺出生日期，無法依年齡判斷身分別，請修正 HIS 檔：' + noBirth.join('、') };
+      }
+      if (fluBad.length > 0) {
+        return { errorMessage: '流感名單有不符公費門檻者（' + (fluMinAge(date, fluRule) === fluRule.specialMinAge ?
+          fluRule.specialMonth + ' 月需滿 ' + fluRule.specialMinAge : '需滿 ' + fluRule.normalMinAge) +
+          ' 歲），請個別拉選例外身分別：' + fluBad.join('、') };
+      }
       if (slotRows.length > 0) {
         if (!pick.type || !pick.lot) {
           return { errorMessage: 'HIS ' + def.expect + ' 有 ' + slotRows.length + ' 人待匯入，請先選擇針劑（疫苗種類＋批號）！' };
         }
         for (var r = 0; r < slotRows.length; r++) {
-          if (def.family !== 'lung' && !slotRows[r][16]) {
-            return { errorMessage: def.family === 'corona'
-              ? '新冠有人缺出生日期，無法依年齡判斷身分別，請填「新冠備援代號」！'
-              : '流感有人未選身分別，請在名單中拉選或填「流感預設代號」！' };
-          }
           var cells = [];
           for (var c = 0; c < slotRows[r].length; c++) cells.push(csvField(slotRows[r][c]));
           lines.push(cells.join(','));
