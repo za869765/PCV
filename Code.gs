@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v3.9)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.1)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -34,6 +34,9 @@
  * v3.9 變更（流感身分別個別拉選）：
  *  - 產檔面板列出 6Z 流感名單，每人可從附件14 對象別代碼表（F01~F09）個別拉選；
  *    未拉選者用「流感預設代號」；優先序：個別拉選 > 預設代號
+ * v4.1 變更（HIS 加計醒目標示）：
+ *  - HIS 加計者：名字加底線＋名字後紅色粗體「＊」標記，與 NIIS 名單者明顯區分；
+ *    佔版面極小（上百人名單也不擠）；浮標顯示來源檔；統計列加圖例說明
  */
 
 function doGet() {
@@ -906,8 +909,12 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
     for (var g = 0; g < config.length; g++) {
       if (cats[config[g].key] && config[g].indicator) indicators += escapeHtml(config[g].indicator);
     }
-    if (hisSource[id]) indicators += '(HIS)';   // HIS 加計備註
-    return "<span class='pname' style='color:" + color + ";' data-tip=\"" + personTip(id) + "\">" + name + indicators + '</span>';
+    // HIS 加計者：名字（含疫苗標記）加底線＋底線外紅色粗體＊，浮標顯示來源
+    var inner = name + indicators;
+    if (hisSource[id]) {
+      inner = "<span class='his-added'>" + inner + "</span><span class='his-mark'>＊</span>";
+    }
+    return "<span class='pname' style='color:" + color + ";' data-tip=\"" + personTip(id) + "\">" + inner + '</span>';
   }
 
   function needleBlock(group, count) {
@@ -954,11 +961,18 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
     '.deep-orange-box { background-color: #ffe9dc; border-left: 4px solid #f4511e; }' +   /* 21PCV 深橘 */
     '.needle-count { font-weight: bold; color: #1976d2; font-size: 24px; }' +
     '.stats-meta { color: #7f8c8d; font-size: 13px; margin-bottom: 16px; }' +
+    '.his-mark { color: #c62828; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
+    '.his-added { text-decoration: underline; text-underline-offset: 2px; }' +
     '</style>';
 
+  var hisAddTotal = Object.keys(hisSource).length;
   result += "<div class='stats-meta'>統計時間：" +
     Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') +
-    '　名單人數：' + totalPersons + ' 人　總針數：' + totalShots + ' 針</div>';
+    '　名單人數：' + totalPersons + ' 人　總針數：' + totalShots + ' 針' +
+    (hisAddTotal > 0
+      ? "　｜　<span class='his-added'>底線</span><span class='his-mark'>＊</span>＝ HIS 掛號檔加計 " + hisAddTotal + ' 人（NIIS 名單無）'
+      : '') +
+    '</div>';
 
   // 針數區塊：依設定順序
   for (var g = 0; g < config.length; g++) {
