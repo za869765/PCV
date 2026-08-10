@@ -1311,6 +1311,34 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     flex-shrink: 0;
 }
 
+/* 橫式全螢幕 2×2 四宮格：檔案共用/新冠/流感/肺鏈各一角 */
+#exportBody {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    align-items: stretch;
+}
+
+#exportBody .exp-sec {
+    margin-bottom: 0;
+    overflow-y: auto;
+    max-height: calc(50vh - 96px);
+}
+
+#exportBody .exp-sec.empty {
+    opacity: 0.6;
+}
+
+@media (max-width: 1100px) {
+    #exportBody {
+        grid-template-columns: 1fr;
+    }
+
+    #exportBody .exp-sec {
+        max-height: none;
+    }
+}
+
 /* 四大容器（共用灰／新冠紅／流感藍／肺鏈橘） */
 .exp-sec {
     background: #fff;
@@ -1950,7 +1978,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v4.4</div>
+    <div class="version-tag">v4.5</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2093,7 +2121,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                         return;
                     }
                 }
-                if (slot === 'z') { fluPersonCodes = {}; fluPersonList = []; }   // 換檔清除舊個別拉選
+                // 換檔清除該檔舊個別拉選（身分別＋針劑＋名單）
+                slotPersonList[slot] = [];
+                slotPersonBatch[slot] = {};
+                if (slot === 'z') { fluPersonCodes = {}; fluPersonList = []; }
                 phisFiles[slot] = file;
                 document.getElementById('phisCard_' + slot).classList.add('attached');
                 document.getElementById('phisName_' + slot).textContent = file.name;
@@ -2140,8 +2171,11 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             ['F07D', '禽畜養殖/動物防疫相關行業工作人員'],
             ['F09', '擴大對象']
         ];
-        var fluPersonList = [];    // 6Z 名單 [{id,name,birth}]
+        var fluPersonList = [];    // 6Z 名單 [{id,name,birth,sex}]（＝slotPersonList.z，載入時同步）
         var fluPersonCodes = {};   // id -> 個別拉選的 F 代碼（跨重繪保留）
+        var slotPersonList = { k: [], z: [], v: [] };    // 各檔名單（針劑分配到人用）
+        var slotPersonBatch = { k: {}, z: {}, v: {} };   // 各檔每人個別針劑（id -> 'type|lot'，跨重繪保留）
+        var famNiisIds = { corona: {}, flu: {}, lung: {} };  // NIIS 三類別身分證集合（灰階略過）
 
         var expOutpost = false;   // 本場為外設站（流感預設 F03A↔F03B；每次開面板重設為所內）
 
@@ -2359,12 +2393,16 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             html += '<div class="s-field"><span class="s-cap">民國</span><div style="font-weight:600;padding:7px 2px;font-size:1.05rem;" id="expDateRoc">—</div></div>';
             html += '</div></div>';
 
-            // ── 容器 2~4：各 HIS 檔（新冠紅／流感藍／肺鏈橘） ──
+            // ── 容器 2~4：各 HIS 檔（新冠紅／流感藍／肺鏈橘），未夾帶顯示佔位 ──
             for (var si = 0; si < slots.length; si++) {
                 var slot = slots[si];
-                if (!phisFiles[slot]) continue;
-                var fam = SLOT_FAMILY[slot];
                 var sec = SLOT_SEC[slot];
+                if (!phisFiles[slot]) {
+                    html += '<div class="exp-sec ' + slot + ' empty"><div class="exp-sec-title">' + sec.icon + ' ' + sec.title + '</div>';
+                    html += '<div style="color:#94a3b8;font-size:0.9rem;text-align:center;padding:24px 0;">未夾帶 ' + PHIS_META[slot].expect + ' 掛號檔<br><small>回主頁夾帶後即出現名單</small></div></div>';
+                    continue;
+                }
+                var fam = SLOT_FAMILY[slot];
                 html += '<div class="exp-sec ' + slot + '">';
                 html += '<div class="exp-sec-title">' + sec.icon + ' ' + sec.title + '｜<span style="font-weight:400;font-size:0.9rem;">' + escAttr(phisFiles[slot].name) + '</span>';
                 if (slot === 'z') {
@@ -2400,21 +2438,27 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<button type="button" class="s-btn s-copy" onclick="addManualBatch(\'' + slot + '\')">加入</button>';
                 html += '</div>';
 
-                // 流感名單：勾選＋個別拉選＋批次套用＋特殊清單列印
+                // 名單：勾選＋個別拉選（流感=身分別＋針劑；新冠/肺鏈=針劑）＋批次套用
+                html += '<div style="margin-top:14px;">';
+                html += '<div style="font-weight:600;margin-bottom:6px;" data-tip="' + (slot === 'z'
+                    ? '每人可個別拉選身分別與針劑&#10;未拉選者：身分別依公費門檻帶預設、針劑用主選&#10;不符門檻→紅底需拉選；已在 NIIS 名單者灰階自動略過'
+                    : '每人可個別拉選針劑（同日多批號分配用）&#10;未拉選者用上方主選針劑&#10;已在 NIIS 名單者灰階自動略過') + '">名單（個別拉選）</div>';
+                html += '<div class="flu-tools">';
+                html += '<button type="button" class="s-btn s-copy" onclick="slotCheckAllG(\'' + slot + '\', true)">全選</button>';
+                html += '<button type="button" class="s-btn s-copy" onclick="slotCheckAllG(\'' + slot + '\', false)">全不選</button>';
                 if (slot === 'z') {
-                    html += '<div style="margin-top:14px;">';
-                    html += '<div style="font-weight:600;margin-bottom:6px;" data-tip="附件14 對象別代碼表&#10;未拉選者：符合公費門檻自動帶預設代號&#10;不符門檻→紅底，需拉選例外身分別才能產檔&#10;已在 NIIS 名單者產檔時自動略過">流感名單身分別（個別拉選）</div>';
-                    html += '<div class="flu-tools">';
-                    html += '<button type="button" class="s-btn s-copy" onclick="fluCheckAll(true)">全選</button>';
-                    html += '<button type="button" class="s-btn s-copy" onclick="fluCheckAll(false)">全不選</button>';
                     html += '<button type="button" class="s-btn s-del" data-tip="只勾選紅底（不符公費門檻）者" onclick="fluCheckBad()">只選不符</button>';
-                    html += '<select class="s-input" id="fluBatchCode" style="min-width:220px;flex:1;">' + fluOptionsHtml('（選擇要批次套用的身分別）') + '</select>';
-                    html += '<button type="button" class="s-btn s-copy" data-tip="把左邊選的身分別&#10;一次套用到所有勾選的人" onclick="applyFluBatch()">套用到勾選</button>';
-                    html += '<button type="button" class="s-btn s-copy" data-tip="列印個別拉選（特殊身分別）人員清單&#10;可選排序、含大勾選框&#10;供列印核對特殊憑證是否留存" onclick="printFluSpecialList()">🖨 特殊身分別清單</button>';
-                    html += '</div>';
-                    html += '<div id="expFluList" style="max-height:44vh;overflow-y:auto;">讀取名單中…</div>';
-                    html += '</div>';
+                    html += '<select class="s-input" id="fluBatchCode" style="min-width:170px;flex:1;">' + fluOptionsHtml('（批次套用的身分別）') + '</select>';
+                    html += '<button type="button" class="s-btn s-copy" data-tip="把左邊選的身分別一次套用到勾選者" onclick="applyFluBatch()">套用身分別</button>';
+                    html += '<button type="button" class="s-btn s-copy" data-tip="列印個別拉選（特殊身分別）人員清單&#10;可選排序、含大勾選框核對特殊憑證留存" onclick="printFluSpecialList()">🖨 特殊清單</button>';
                 }
+                html += '</div>';
+                html += '<div class="flu-tools">';
+                html += '<select class="s-input" id="expBatBatch_' + slot + '" style="min-width:200px;flex:1;">' + slotBatchOptionsHtml(slot, '（批次套用的針劑）') + '</select>';
+                html += '<button type="button" class="s-btn s-copy" data-tip="把左邊選的針劑一次套用到勾選者&#10;同日多批號時先勾人再套用" onclick="applySlotBatch(\'' + slot + '\')">套用針劑</button>';
+                html += '</div>';
+                html += '<div id="' + (slot === 'z' ? 'expFluList' : 'expList_' + slot) + '">讀取名單中…</div>';
+                html += '</div>';
                 html += '</div>';
             }
             document.getElementById('exportBody').innerHTML = html;
@@ -2438,7 +2482,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             }
 
             updateDateRoc();
-            if (phisFiles.z) loadFluList();
+            loadSlotLists();
         }
 
         // 解析 6Z 檔名單（前端，表頭偵測同後端）
@@ -2471,54 +2515,124 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return list;
         }
 
-        var fluNiisIds = {};   // NIIS 名單「流感類別」身分證集合（後端依辨識設定判定；產檔會略過→前端灰階不擋）
+        var fluNiisIds = {};   // ＝famNiisIds.flu（載入後同步；產檔會略過→前端灰階不擋）
 
-        function loadFluList() {
-            var box = document.getElementById('expFluList');
-            if (!box || !phisFiles.z) return;
-            Promise.all([
-                readFileAsText(phisFiles.z, 'big5'),
-                currentFile ? readFileAsText(currentFile, 'big5') : Promise.resolve('')
-            ]).then(function(texts) {
-                fluPersonList = parseFluPersons(texts[0]);
-                if (!texts[1]) { fluNiisIds = {}; renderFluRows(); return; }
+        function slotBatchOptionsHtml(slot, defaultLabel) {
+            var fam = SLOT_FAMILY[slot];
+            var opts = '<option value="">' + defaultLabel + '</option>';
+            for (var bi = 0; bi < exportConfig.batches.length; bi++) {
+                var b = exportConfig.batches[bi];
+                if (b.family && b.family !== fam) continue;
+                opts += '<option value="' + bi + '">' + escAttr(batchLabel(b)) + '</option>';
+            }
+            return opts;
+        }
+
+        function chkIdOf(slot, i) { return slot === 'z' ? 'fluChk_' + i : 'chk_' + slot + '_' + i; }
+        function batSelIdOf(slot, i) { return slot === 'z' ? 'expFluBat_' + i : 'bat_' + slot + '_' + i; }
+        function listBoxOf(slot) { return document.getElementById(slot === 'z' ? 'expFluList' : 'expList_' + slot); }
+
+        function loadSlotLists() {
+            var slots = ['k', 'z', 'v'].filter(function(s) { return phisFiles[s]; });
+            if (slots.length === 0) return;
+            var reads = slots.map(function(s) { return readFileAsText(phisFiles[s], 'big5'); });
+            reads.push(currentFile ? readFileAsText(currentFile, 'big5') : Promise.resolve(''));
+            Promise.all(reads).then(function(texts) {
+                for (var i = 0; i < slots.length; i++) slotPersonList[slots[i]] = parseFluPersons(texts[i]);
+                fluPersonList = slotPersonList.z;
+                var done = function() {
+                    fluNiisIds = famNiisIds.flu;
+                    for (var j = 0; j < slots.length; j++) renderSlotRows(slots[j]);
+                };
+                var niisText = texts[texts.length - 1];
+                if (!niisText) { famNiisIds = { corona: {}, flu: {}, lung: {} }; done(); return; }
                 google.script.run
-                    .withSuccessHandler(function(set) { fluNiisIds = set || {}; renderFluRows(); })
-                    .withFailureHandler(function() { fluNiisIds = {}; renderFluRows(); })
-                    .getNiisFluIds(texts[1]);
+                    .withSuccessHandler(function(res) { famNiisIds = res || { corona: {}, flu: {}, lung: {} }; done(); })
+                    .withFailureHandler(function() { famNiisIds = { corona: {}, flu: {}, lung: {} }; done(); })
+                    .getNiisFamilyIds(niisText);
             }).catch(function() {
-                box.innerHTML = '<span style="color:#e74c3c;">名單讀取失敗</span>';
+                ['k', 'z', 'v'].forEach(function(s) {
+                    var b = listBoxOf(s);
+                    if (b) b.innerHTML = '<span style="color:#e74c3c;">名單讀取失敗</span>';
+                });
             });
         }
 
-        function renderFluRows() {
-            var box = document.getElementById('expFluList');
+        function renderSlotRows(slot) {
+            var box = listBoxOf(slot);
             if (!box) return;
-            {
-                if (fluPersonList.length === 0) { box.innerHTML = '<span style="color:#94a3b8;">6Z 檔中沒有名單資料</span>'; return; }
-                var opts = fluOptionsHtml('（預設）');
-                var html = '';
-                for (var i = 0; i < fluPersonList.length; i++) {
-                    var p = fluPersonList[i];
-                    var inNiis = !!fluNiisIds[p.id];
+            var list = slotPersonList[slot];
+            if (list.length === 0) { box.innerHTML = '<span style="color:#94a3b8;">' + PHIS_META[slot].expect + ' 檔中沒有名單資料</span>'; return; }
+            var famSet = famNiisIds[SLOT_FAMILY[slot]] || {};
+            var idOpts = slot === 'z' ? fluOptionsHtml('（預設）') : '';
+            var batOpts = slotBatchOptionsHtml(slot, '（主選針劑）');
+            var html = '';
+            for (var i = 0; i < list.length; i++) {
+                var p = list[i];
+                var inNiis = !!famSet[p.id];
+                var dis = inNiis ? ' disabled' : '';
+                if (slot === 'z') {
                     html += '<div class="flu-row' + (inNiis ? ' skip' : '') + '" id="fluRow_' + i + '">';
-                    html += '<input type="checkbox" id="fluChk_' + i + '" style="width:18px;height:18px;flex-shrink:0;"' + (inNiis ? ' disabled' : '') + '>';
-                    html += '<span class="flu-name" style="min-width:150px;font-weight:600;" id="fluName_' + i + '">' + escAttr(p.name) + '</span>';
+                    html += '<input type="checkbox" id="fluChk_' + i + '" style="width:18px;height:18px;flex-shrink:0;"' + dis + '>';
+                    html += '<span class="flu-name" style="min-width:120px;font-weight:600;" id="fluName_' + i + '">' + escAttr(p.name) + '</span>';
                     html += '<span class="flu-hand">👉</span>';
-                    html += '<select class="s-input" id="expFluSel_' + i + '" style="flex:1;" onchange="updateFluRowStates()"' + (inNiis ? ' disabled' : '') + '>' + opts + '</select>';
+                    html += '<select class="s-input" id="expFluSel_' + i + '" style="flex:1;min-width:150px;" onchange="updateFluRowStates()"' + dis + '>' + idOpts + '</select>';
+                    html += '<select class="s-input" id="expFluBat_' + i + '" style="flex:1;min-width:140px;" data-tip="此人使用的針劑&#10;未拉選＝用上方主選針劑"' + dis + '>' + batOpts + '</select>';
+                    html += '</div>';
+                } else {
+                    var age = fluAgeOf(p);
+                    html += '<div class="flu-row' + (inNiis ? ' skip' : '') + '" id="row_' + slot + '_' + i + '">';
+                    html += '<input type="checkbox" id="chk_' + slot + '_' + i + '" style="width:18px;height:18px;flex-shrink:0;"' + dis + '>';
+                    html += '<span class="flu-name" style="min-width:120px;font-weight:600;" data-tip="身分證：' + escAttr(p.id) + (p.birth ? '&#10;出生：' + escAttr(p.birth) : '') + (inNiis ? '&#10;已在 NIIS 名單，產檔時自動略過' : '') + '">' + escAttr(p.name) + (age != null ? '（' + age + ' 歲）' : '') + '</span>';
+                    html += '<select class="s-input" id="bat_' + slot + '_' + i + '" style="flex:1;min-width:160px;" data-tip="此人使用的針劑&#10;未拉選＝用上方主選針劑"' + dis + '>' + batOpts + '</select>';
                     html += '</div>';
                 }
-                box.innerHTML = html;
-                // 還原先前個別拉選
-                for (var j = 0; j < fluPersonList.length; j++) {
-                    var code = fluPersonCodes[fluPersonList[j].id];
-                    if (code) {
-                        var sel = document.getElementById('expFluSel_' + j);
-                        if (sel && !sel.disabled) sel.value = code;
+            }
+            box.innerHTML = html;
+            // 還原先前個別拉選（身分別＋針劑）
+            for (var j = 0; j < list.length; j++) {
+                if (slot === 'z') {
+                    var code = fluPersonCodes[list[j].id];
+                    var sel = document.getElementById('expFluSel_' + j);
+                    if (code && sel && !sel.disabled) sel.value = code;
+                }
+                var key = slotPersonBatch[slot][list[j].id];
+                if (key) {
+                    var bs = document.getElementById(batSelIdOf(slot, j));
+                    if (bs && !bs.disabled) {
+                        for (var bi2 = 0; bi2 < exportConfig.batches.length; bi2++) {
+                            var b2 = exportConfig.batches[bi2];
+                            if (b2.type + '|' + b2.lot === key) { bs.value = String(bi2); break; }
+                        }
                     }
                 }
-                updateFluRowStates();
             }
+            if (slot === 'z') updateFluRowStates();
+        }
+
+        function slotCheckAllG(slot, on) {
+            var list = slotPersonList[slot];
+            for (var i = 0; i < list.length; i++) {
+                var c = document.getElementById(chkIdOf(slot, i));
+                if (c && !c.disabled) c.checked = on;
+            }
+        }
+
+        function applySlotBatch(slot) {
+            var sel = document.getElementById('expBatBatch_' + slot);
+            if (!sel || sel.value === '') { showModal('請先在批次選單選擇要套用的針劑！'); return; }
+            var n = 0;
+            var list = slotPersonList[slot];
+            for (var i = 0; i < list.length; i++) {
+                var c = document.getElementById(chkIdOf(slot, i));
+                if (c && c.checked) {
+                    var bs = document.getElementById(batSelIdOf(slot, i));
+                    if (bs && !bs.disabled) { bs.value = sel.value; n++; }
+                }
+            }
+            if (n === 0) { showModal('沒有勾選任何人！請先勾選要套用的對象。'); return; }
+            var b = exportConfig.batches[parseInt(sel.value, 10)];
+            showFx('success', '已套用針劑', (b ? b.type + '｜' + b.lot : '') + '　共 ' + n + ' 人', 2000);
         }
 
         // 依門檻/日期/拉選狀態更新每列：紅底＋浮標原因＋姓名旁年齡
@@ -2560,13 +2674,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 }
             }
             refreshMainListBadges();   // 主頁醒目提示同步消長
-        }
-
-        function fluCheckAll(on) {
-            for (var i = 0; i < fluPersonList.length; i++) {
-                var c = document.getElementById('fluChk_' + i);
-                if (c && !c.disabled) c.checked = on;
-            }
         }
 
         function fluCheckBad() {
@@ -2645,8 +2752,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 h += '</tr>';
             }
             h += '</tbody></table>';
-            h += '<div style="margin-top:24px;font-size:14px;display:flex;justify-content:space-between;">' +
-                '<span>核對人員簽章：＿＿＿＿＿＿＿＿</span><span>主管核章：＿＿＿＿＿＿＿＿</span><span>日期：＿＿＿＿＿＿＿＿</span></div>';
             return h;
         }
 
@@ -2667,7 +2772,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 'th, td { border: 1px solid #555; padding: 8px 10px; text-align: center; }' +
                 'th { background: #f0f0f0; }' +
                 '.chk { width: 64px; } .chkbox { display: inline-block; width: 30px; height: 30px; border: 2.5px solid #333; border-radius: 4px; }' +
-                '.sign { margin-top: 28px; font-size: 15px; display: flex; justify-content: space-between; }' +
                 '.no-print { text-align: center; margin: 16px 0; }' +
                 '.no-print button { padding: 9px 18px; margin: 0 6px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; background: #3498db; color: #fff; }' +
                 '.no-print button.act { background: #2ecc71; }' +
@@ -2683,7 +2787,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 '<button onclick="window.close()">關閉</button></div>' +
                 '<table><thead><tr><th class="chk">憑證留存</th><th>姓名</th><th>性別</th><th>出生</th><th>年齡</th><th>身分證字號</th><th>身分別</th></tr></thead>' +
                 '<tbody id="tb"></tbody></table>' +
-                '<div class="sign"><span>核對人員簽章：＿＿＿＿＿＿＿＿</span><span>主管核章：＿＿＿＿＿＿＿＿</span><span>日期：＿＿＿＿＿＿＿＿</span></div>' +
                 '<scr' + 'ipt>var DATA=' + JSON.stringify(rows).replace(/</g, '\\u003c') +
                 ';function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");}' +
                 'function render(){var h="";for(var i=0;i<DATA.length;i++){var r=DATA[i];' +
@@ -2709,8 +2812,23 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 if (fsel.value) fluPersonCodes[fluPersonList[fi].id] = fsel.value;
                 else delete fluPersonCodes[fluPersonList[fi].id];
             }
+            // 各檔每人個別針劑（select 存 batch index → 轉 'type|lot' 記憶，跨重繪/重排不失效）
+            ['k', 'z', 'v'].forEach(function(slot) {
+                var listp = slotPersonList[slot];
+                for (var pi = 0; pi < listp.length; pi++) {
+                    var bs = document.getElementById(batSelIdOf(slot, pi));
+                    if (!bs) continue;
+                    var bidx = parseInt(bs.value, 10);
+                    if (bs.value !== '' && bidx >= 0 && cfg.batches[bidx]) {
+                        slotPersonBatch[slot][listp[pi].id] = cfg.batches[bidx].type + '|' + cfg.batches[bidx].lot;
+                    } else {
+                        delete slotPersonBatch[slot][listp[pi].id];
+                    }
+                }
+            });
             var picks = { slots: {}, org: cfg.org, date: isoToRoc(dateEl.value),
-                          fluCodes: fluPersonCodes, outpost: expOutpost, rules: cfg };
+                          fluCodes: fluPersonCodes, personBatch: slotPersonBatch,
+                          outpost: expOutpost, rules: cfg };
             var slots = ['k', 'z', 'v'];
             cfg.lastPick = cfg.lastPick || {};
             cfg._uiDose = cfg._uiDose || {};
@@ -3294,7 +3412,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             if (!exportConfig) return null;
             var picks = { slots: {}, org: exportConfig.org,
                           date: isoToRoc(exportConfig._uiDateIso || defaultThursdayISO()),
-                          fluCodes: fluPersonCodes, outpost: expOutpost, rules: exportConfig };
+                          fluCodes: fluPersonCodes, personBatch: slotPersonBatch,
+                          outpost: expOutpost, rules: exportConfig };
             var lp = exportConfig.lastPick || {};
             ['k', 'z', 'v'].forEach(function(slot) {
                 if (!phisFiles[slot]) return;

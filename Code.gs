@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.4)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.5)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -57,6 +57,12 @@
  *  - 主頁名單：HIS 加計流感者不符公費門檻且未拉選 → 紅色脈動＋⚠ 醒目動畫，
  *    設定/拉選/場次切換後即時消長（personSpan 加 data-his 供前端判斷）
  *  - NIIS 名單內的流感者浮標改顯示「已在 NIIS 名單」，不再誤標不符門檻
+ * v4.5 變更（針劑分配到人＋四宮格）：
+ *  - 匯出面板改橫式全螢幕 2×2 四宮格（檔案共用/新冠/流感/肺鏈各一角，寬敞操作）
+ *  - 三種疫苗名單每人可個別拉選針劑（疫苗種類＋批號；同日最多五種批號分不同人），
+ *    未拉選用該檔主選針劑；勾選＋批次套用；picks.personBatch 傳後端逐人套用
+ *  - 特殊身分別清單移除簽章列（三處：列印視窗/一鍵列印附頁/寄信 PDF）
+ *  - 新增 getNiisFamilyIds（一次回傳三類別 NIIS 身分證集合，前端名單灰階用）
  */
 
 function doGet() {
@@ -607,24 +613,30 @@ function csvField(v) {
   return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 }
 
-// 前端產檔面板用：NIIS 名單中「流感類別」的身分證集合（與加計/略過邏輯同一套辨識設定）
-function getNiisFluIds(jnContent) {
+// 前端產檔面板用：NIIS 名單三類別身分證集合（與加計/略過邏輯同一套辨識設定）
+function getNiisFamilyIds(jnContent) {
   try {
-    if (!jnContent) return {};
+    var out = { corona: {}, flu: {}, lung: {} };
+    if (!jnContent) return out;
     var config = getVaccineConfigList();
     var keyFam = {};
     for (var g = 0; g < config.length; g++) keyFam[config[g].key] = config[g].family;
     var data = analyzeNIIS(jnContent, config);
-    var out = {};
     for (var id in data.idCategoryCount) {
       for (var k in data.idCategoryCount[id]) {
-        if (keyFam[k] === 'flu') { out[id] = true; break; }
+        var fam = keyFam[k];
+        if (fam && out[fam]) out[fam][id] = true;
       }
     }
     return out;
   } catch (e) {
-    return {};
+    return { corona: {}, flu: {}, lung: {} };
   }
+}
+
+// 相容舊呼叫
+function getNiisFluIds(jnContent) {
+  return getNiisFamilyIds(jnContent).flu;
 }
 
 // 民國日期字串取「年」：'0420910'→42、'480327'→48、'1100315'→110
@@ -674,7 +686,8 @@ function buildNiisExport(phisFiles, jnContent, picks) {
     phisFiles = phisFiles || {};
     picks = picks || {};
     var slotPicks = picks.slots || {};
-    var fluCodes = picks.fluCodes || {};   // 流感每人個別拉選的身分別（id -> F代碼）
+    var fluCodes = picks.fluCodes || {};       // 流感每人個別拉選的身分別（id -> F代碼）
+    var personBatch = picks.personBatch || {}; // 每人個別拉選的針劑（slot -> { id: 'type|lot' }）
     var org = String(picks.org || '').trim();
     var date = String(picks.date || '').trim();
     if (!org) return { errorMessage: '接種機構代碼未設定！' };
@@ -723,12 +736,22 @@ function buildNiisExport(phisFiles, jnContent, picks) {
       });
       var pick = slotPicks[def.slot] || {};
       var slotDose = String(pick.dose || '').trim();
+      var slotPB = personBatch[def.slot] || {};
       var slotRows = [];
       var noBirth = [];      // 新冠缺出生日期（擋下列名）
       var fluBad = [];       // 流感年齡不符公費門檻且未拉選（擋下列名）
+      var noBatch = [];      // 個別與主選針劑皆無（擋下列名）
       for (var i = 0; i < ids.length; i++) {
         var pid = ids[i];
         if (niisFam[def.family][pid]) { skipped++; continue; }
+        // 針劑：個別拉選優先，否則用該檔主選
+        var pType = pick.type || '';
+        var pLot = pick.lot || '';
+        if (slotPB[pid]) {
+          var pbParts = String(slotPB[pid]).split('|');
+          if (pbParts[0]) { pType = pbParts[0]; pLot = pbParts.slice(1).join('|'); }
+        }
+        if (!pType || !pLot) noBatch.push(parsed.idNameMap[pid] || pid);
         var identity = '';
         if (def.family === 'corona') {
           // 新冠：一律依年齡自動判斷（只看出生年，對照表可設定）
@@ -752,7 +775,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
         slotRows.push([
           pid, parsed.idNameMap[pid] || '', sex, birth, '1',
           parsed.idAddrMap[pid] || '', parsed.idPhoneMap[pid] || '', '',
-          org, date, pick.type || '', dose, pick.lot || '', '', '1', '',
+          org, date, pType, dose, pLot, '', '1', '',
           identity, '', '', '', '', '', '', ''
         ]);
         exported.push({ name: parsed.idNameMap[pid] || pid, slot: def.expect });
@@ -765,10 +788,10 @@ function buildNiisExport(phisFiles, jnContent, picks) {
           fluRule.specialMonth + ' 月需滿 ' + fluRule.specialMinAge : '需滿 ' + fluRule.normalMinAge) +
           ' 歲），請個別拉選例外身分別：' + fluBad.join('、') };
       }
+      if (noBatch.length > 0) {
+        return { errorMessage: 'HIS ' + def.expect + ' 有人未分配針劑（個別未拉選且無主選）：' + noBatch.join('、') };
+      }
       if (slotRows.length > 0) {
-        if (!pick.type || !pick.lot) {
-          return { errorMessage: 'HIS ' + def.expect + ' 有 ' + slotRows.length + ' 人待匯入，請先選擇針劑（疫苗種類＋批號）！' };
-        }
         for (var r = 0; r < slotRows.length; r++) {
           var cells = [];
           for (var c = 0; c < slotRows[r].length; c++) cells.push(csvField(slotRows[r][c]));
