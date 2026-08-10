@@ -539,6 +539,28 @@ h1                { animation-delay: 0.05s; }
     background-color: rgba(52, 152, 219, 0.12);
 }
 
+/* 主頁名單：HIS 流感者不符公費門檻未拉選 → 紅色脈動＋⚠ 醒目提示 */
+.pname.flu-alert {
+    padding: 1px 4px;
+    animation: nameAlert 1.4s ease-in-out infinite;
+}
+
+.pname.flu-alert::after {
+    content: "⚠";
+    color: #c62828;
+    font-weight: bold;
+    margin-left: 2px;
+}
+
+@keyframes nameAlert {
+    0%, 100% { background-color: rgba(231, 76, 60, 0.10); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+    50%      { background-color: rgba(231, 76, 60, 0.30); box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.20); }
+}
+
+@media print {
+    .pname.flu-alert { animation: none; background: #ffebee !important; }
+}
+
 /* ===== 全螢幕動畫回饋彈窗 ===== */
 .fx-overlay {
     position: fixed;
@@ -1928,7 +1950,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v4.3</div>
+    <div class="version-tag">v4.4</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2213,16 +2235,20 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     }
                     lines.push('新冠身分別：' + (code ? code + '（依年齡自動）' : '⚠ 缺出生無法判斷'));
                 } else if (f === 'flu') {
-                    var picked = fluPersonCodes[pid];
-                    if (picked) {
-                        lines.push('流感身分別：' + picked + '（個別拉選）');
+                    if (t.getAttribute('data-his-flu') !== '1') {
+                        lines.push('流感身分別：已在 NIIS 名單（無需匯入）');
                     } else {
-                        var r = rulesCfg.fluRule || { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 };
-                        var minAge = (ref.m === r.specialMonth) ? r.specialMinAge : r.normalMinAge;
-                        if (age != null && age >= minAge) {
-                            lines.push('流感身分別：' + fluDefaultCode() + '（預設・' + (expOutpost ? '外設' : '所內') + '）');
+                        var picked = fluPersonCodes[pid];
+                        if (picked) {
+                            lines.push('流感身分別：' + picked + '（個別拉選）');
                         } else {
-                            lines.push('流感身分別：⚠ 不符公費門檻（需滿 ' + minAge + ' 歲），請至匯出面板拉選');
+                            var r = rulesCfg.fluRule || { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 };
+                            var minAge = (ref.m === r.specialMonth) ? r.specialMinAge : r.normalMinAge;
+                            if (age != null && age >= minAge) {
+                                lines.push('流感身分別：' + fluDefaultCode() + '（預設・' + (expOutpost ? '外設' : '所內') + '）');
+                            } else {
+                                lines.push('流感身分別：⚠ 不符公費門檻（需滿 ' + minAge + ' 歲），請至匯出面板拉選');
+                            }
                         }
                     }
                 } else if (f === 'lung') {
@@ -2230,6 +2256,22 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 }
             }
             return lines.join('\n');
+        }
+
+        // 主頁名單醒目提示：HIS 加計流感者不符門檻且未拉選 → .flu-alert 脈動
+        function refreshMainListBadges() {
+            var rulesCfg = exportConfig || DEFAULT_RULES;
+            var r = rulesCfg.fluRule || { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 };
+            var ref = refYearMonth();
+            var minAge = (ref.m === r.specialMonth) ? r.specialMinAge : r.normalMinAge;
+            var spans = document.querySelectorAll('#result .pname[data-his-flu="1"]');
+            for (var i = 0; i < spans.length; i++) {
+                var t = spans[i];
+                var by = rocYearOfJs(t.getAttribute('data-birth') || '');
+                var age = (by == null || ref.y == null) ? null : (ref.y - by);
+                var picked = fluPersonCodes[t.getAttribute('data-pid') || ''];
+                t.classList.toggle('flu-alert', !picked && (age == null || age < minAge));
+            }
         }
 
         function updateDateRoc() {
@@ -2240,7 +2282,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function onDateChanged() {
             if (exportConfig) exportConfig._uiDateIso = (document.getElementById('expDate') || {}).value || '';
             updateDateRoc();
-            updateFluRowStates();   // 月份變動會改變公費門檻
+            updateFluRowStates();      // 月份變動會改變公費門檻
+            refreshMainListBadges();   // 主頁醒目提示同步
         }
 
         function openExport() {
@@ -2516,6 +2559,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     row.setAttribute('data-tip', '個別拉選：' + sel.value + '（特殊身分別）\n' + base);
                 }
             }
+            refreshMainListBadges();   // 主頁醒目提示同步消長
         }
 
         function fluCheckAll(on) {
@@ -2930,6 +2974,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                         exportConfig = res.config;
                         closeRuleSettings();
                         renderExport();   // 門檻/代號變動 → 重新判讀紅底與預設
+                        refreshMainListBadges();
                         showFx('success', '自動判讀設定已儲存', '已存雲端（全所共用）', 2200);
                     } else {
                         showFx('error', '儲存失敗', (res && res.error) || '未知錯誤', 3200);
@@ -3071,6 +3116,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function displayResult(htmlContent) {
             document.getElementById('result').innerHTML = htmlContent;
             addNeedleAdjustmentFeatures();
+            refreshMainListBadges();
         }
 
         /* ===== 異常人員彈窗（重複掛號 / 疫苗衝突） ===== */
@@ -3647,7 +3693,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         /* ===== 開頁預載產檔設定（主頁浮標「目前身分別」動態計算用） ===== */
         if (window.google && google.script && google.script.run) {
             google.script.run
-                .withSuccessHandler(function(cfg) { if (cfg) exportConfig = cfg; })
+                .withSuccessHandler(function(cfg) { if (cfg) exportConfig = cfg; refreshMainListBadges(); })
                 .withFailureHandler(function() {})
                 .getNiisExportConfig();
         }

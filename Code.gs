@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.3)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.4)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -53,6 +53,10 @@
  *  - 紅底不符列加脈動＋👉手勢動畫；場次顯示「目前設定是：…」＋「切換」鈕
  *  - 手動新增疫苗種類/批號支援記憶值自動填入（datalist，三容器皆有）
  *  - 一鍵列印附「流感特殊身分別檢核表」獨立一頁（大勾選框＋簽章欄）
+ * v4.4 變更：
+ *  - 主頁名單：HIS 加計流感者不符公費門檻且未拉選 → 紅色脈動＋⚠ 醒目動畫，
+ *    設定/拉選/場次切換後即時消長（personSpan 加 data-his 供前端判斷）
+ *  - NIIS 名單內的流感者浮標改顯示「已在 NIIS 名單」，不再誤標不符門檻
  */
 
 function doGet() {
@@ -1038,7 +1042,7 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
     return '身分證：' + escapeHtml(id) +
       (idBirthMap[id] ? '&#10;出生：' + escapeHtml(idBirthMap[id]) : '') +
       '&#10;疫苗：' + escapeHtml(labels.join('、') || '無') + '&#10;本日共 ' + labels.length + ' 針' +
-      (hisSource[id] ? '&#10;來源：HIS ' + escapeHtml(hisSource[id].join('、')) + ' 掛號檔加計（NIIS 名單無）'
+      (hisSource[id] ? '&#10;來源：HIS ' + escapeHtml(hisSource[id].join('、')) + ' 掛號檔加計（該疫苗 NIIS 名單無）'
                      : '&#10;來源：NIIS 名單');
   }
 
@@ -1062,7 +1066,9 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
     if (fams.lung.length) famList.push('lung');
     return "<span class='pname' style='color:" + color + ";' data-pid=\"" + escapeHtml(id) +
       "\" data-fams=\"" + famList.join(',') + "\" data-birth=\"" + escapeHtml(idBirthMap[id] || '') +
-      "\" data-tip=\"" + personTip(id) + "\">" + inner + '</span>';
+      "\"" + (hisSource[id] ? " data-his=\"1\"" +
+        (hisSource[id].indexOf('6Z') !== -1 ? " data-his-flu=\"1\"" : '') : '') +
+      " data-tip=\"" + personTip(id) + "\">" + inner + '</span>';
   }
 
   function needleBlock(group, count) {
