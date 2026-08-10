@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.2)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.3)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -46,6 +46,13 @@
  *  - 流感容器：外設站切換（F03A↔F03B）；名單勾選＋批次套用；年齡不符公費門檻
  *    → 紅底＋浮標原因，未拉選例外身分別前「產生並下載」前後端皆擋
  *  - 新冠缺出生日期改為直接列名擋下（HIS 檔必有出生年，備援代號取消）
+ * v4.3 變更（八點 UI/流程優化）：
+ *  - HIS 卡片移除 ✕（重新夾帶即替換）；按鈕更名「身分別設定與匯出」
+ *  - 主頁名單浮標顯示「目前身分別＋來源」（前端依設定即時計算，設定變更即時反映）
+ *  - 判讀設定面板補流感 F 代碼表（可編輯存雲端，名單拉選選單同步使用）
+ *  - 紅底不符列加脈動＋👉手勢動畫；場次顯示「目前設定是：…」＋「切換」鈕
+ *  - 手動新增疫苗種類/批號支援記憶值自動填入（datalist，三容器皆有）
+ *  - 一鍵列印附「流感特殊身分別檢核表」獨立一頁（大勾選框＋簽章欄）
  */
 
 function doGet() {
@@ -411,12 +418,38 @@ function getDefaultCovidTable() {
   ];
 }
 
+// 流感對象別代碼表預設（附件14）
+function getDefaultFluCodeTable() {
+  return [
+    { code: 'F01',    label: '6個月以上至國小入學前幼兒' },
+    { code: 'F02A01', label: '國小學童' },
+    { code: 'F02A02', label: '國中生' },
+    { code: 'F02A03', label: '高中/職、五專1-3年級學生' },
+    { code: 'F02B',   label: '幼兒園托育機構/居家托育人員' },
+    { code: 'F03A',   label: '滿50歲以上成人（所內/合約院所）' },
+    { code: 'F03B',   label: '滿50歲以上成人（社區/到宅）' },
+    { code: 'F04A',   label: '長照機構受照顧者' },
+    { code: 'F04B',   label: '長照機構直接照顧工作人員' },
+    { code: 'F05A',   label: '孕婦' },
+    { code: 'F05B',   label: '6個月內嬰兒之雙親/實際扶養者' },
+    { code: 'F06A',   label: '高風險慢性病患' },
+    { code: 'F06B',   label: '罕見疾病患者' },
+    { code: 'F06C',   label: '重大傷病患者' },
+    { code: 'F07A',   label: '具執業登記之醫事人員' },
+    { code: 'F07B',   label: '醫療院所非執登工作人員' },
+    { code: 'F07C',   label: '防疫相關人員' },
+    { code: 'F07D',   label: '禽畜養殖/動物防疫相關行業工作人員' },
+    { code: 'F09',    label: '擴大對象' }
+  ];
+}
+
 // 預設值取自 2026-08 實際匯入成功案例（批號來自結存量檔）
 function getDefaultNiisExportConfig() {
   return {
     org: '2341050013',
     idCodes: { fluIn: 'F03A', fluOut: 'F03B' },
     covidTable: getDefaultCovidTable(),
+    fluCodeTable: getDefaultFluCodeTable(),
     // 流感公費門檻：特別月份（10月）需滿 specialMinAge，其他月份滿 normalMinAge
     fluRule: { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 },
     batches: [
@@ -475,6 +508,18 @@ function cleanNiisExportConfig(cfg) {
       code: String((srcTable[t] || {}).code || def.covidTable[t].code).trim().slice(0, 10).toUpperCase()
     });
   }
+  // 流感對象別代碼表（可編輯；空/壞資料回退附件14 預設）
+  clean.fluCodeTable = [];
+  var srcFlu = cfg.fluCodeTable || [];
+  var seenFlu = {};
+  for (var f2 = 0; f2 < srcFlu.length && clean.fluCodeTable.length < 40; f2++) {
+    var fc = String((srcFlu[f2] || {}).code || '').trim().slice(0, 10).toUpperCase();
+    var fl = String((srcFlu[f2] || {}).label || '').trim().slice(0, 40);
+    if (!fc || seenFlu[fc]) continue;
+    seenFlu[fc] = true;
+    clean.fluCodeTable.push({ code: fc, label: fl });
+  }
+  if (clean.fluCodeTable.length === 0) clean.fluCodeTable = getDefaultFluCodeTable();
   var list = cfg.batches || [];
   var seen = {};
   for (var i = 0; i < list.length && clean.batches.length < 100; i++) {
@@ -993,7 +1038,8 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
     return '身分證：' + escapeHtml(id) +
       (idBirthMap[id] ? '&#10;出生：' + escapeHtml(idBirthMap[id]) : '') +
       '&#10;疫苗：' + escapeHtml(labels.join('、') || '無') + '&#10;本日共 ' + labels.length + ' 針' +
-      (hisSource[id] ? '&#10;來源：HIS ' + escapeHtml(hisSource[id].join('、')) + ' 掛號檔加計（NIIS 名單無）' : '');
+      (hisSource[id] ? '&#10;來源：HIS ' + escapeHtml(hisSource[id].join('、')) + ' 掛號檔加計（NIIS 名單無）'
+                     : '&#10;來源：NIIS 名單');
   }
 
   function personSpan(id, color) {
@@ -1008,7 +1054,15 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
     if (hisSource[id]) {
       inner = "<span class='his-added'>" + inner + "</span><span class='his-mark'>＊</span>";
     }
-    return "<span class='pname' style='color:" + color + ";' data-tip=\"" + personTip(id) + "\">" + inner + '</span>';
+    // data-pid/fams/birth：前端浮標據此即時計算「目前身分別」（設定變更即時反映）
+    var fams = familyGroupsOf(id);
+    var famList = [];
+    if (fams.corona.length) famList.push('corona');
+    if (fams.flu.length) famList.push('flu');
+    if (fams.lung.length) famList.push('lung');
+    return "<span class='pname' style='color:" + color + ";' data-pid=\"" + escapeHtml(id) +
+      "\" data-fams=\"" + famList.join(',') + "\" data-birth=\"" + escapeHtml(idBirthMap[id] || '') +
+      "\" data-tip=\"" + personTip(id) + "\">" + inner + '</span>';
   }
 
   function needleBlock(group, count) {
@@ -1025,7 +1079,7 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
     html += "<span style='color:#27ae60;font-weight:bold;'>" + count + '</span> 針</span>';
     html += "<div class='needle-adjuster'>";
     html += "<button class='adjust-btn minus-btn' onclick=\"adjustCount('" + key + "', -1)\">-</button>";
-    html += "<input type='number' class='adjustment-input-field' id='" + key + "Adjustment' value='0' onchange=\"updateCount('" + key + "')\">";
+    html += "<input type='number' class='adjustment-input-field' id='" + key + "Adjustment' value='0' readonly tabindex='-1'>";
     html += "<button class='adjust-btn plus-btn' onclick=\"adjustCount('" + key + "', 1)\">+</button>";
     html += '</div>';
     html += '</div></div>';
@@ -1116,7 +1170,8 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
 }
 
 // ===== 寄送郵件 =====
-function sendEmailWithAttachments(htmlContent, note, files, recipients) {
+// specialHtml（v4.3 選填）：流感特殊身分別檢核表 HTML，轉 PDF 一併附上
+function sendEmailWithAttachments(htmlContent, note, files, recipients, specialHtml) {
   try {
     var today = new Date();
     var tz = Session.getScriptTimeZone();
@@ -1148,6 +1203,15 @@ function sendEmailWithAttachments(htmlContent, note, files, recipients) {
     body += '此郵件由佳里區衛生所疫苗掛號對針統計系統自動發送。';
 
     var attachments = [pdfBlob];
+    if (specialHtml) {
+      attachments.push(Utilities.newBlob(
+        '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
+        'body { font-family: "Microsoft JhengHei", "Noto Sans TC", sans-serif; padding: 14px; color: #2c3e50; }' +
+        'table { width: 100%; border-collapse: collapse; }' +
+        '</style></head><body>' + specialHtml + '</body></html>',
+        'text/html', 'flu_special_' + formattedDate + '.html'
+      ).getAs('application/pdf').setName('流感特殊身分別清單_' + formattedDate + '.pdf'));
+    }
     if (files && files.length > 0) {
       // 前端傳來 base64 編碼的 CSV 檔案內容，解碼後轉為附件避免亂碼
       for (var i = 0; i < files.length; i++) {

@@ -314,30 +314,6 @@ h1::after {
     min-height: 1em;
 }
 
-.phis-clear {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 22px;
-    height: 22px;
-    border: none;
-    border-radius: 50%;
-    background: #e74c3c;
-    color: #fff;
-    font-size: 12px;
-    cursor: pointer;
-    display: none;
-    line-height: 1;
-    font-family: 'Noto Sans TC', sans-serif;
-}
-
-.phis-card.attached .phis-clear {
-    display: block;
-}
-
-.phis-clear:hover {
-    background: #c0392b;
-}
 
 /* ===== 按鈕 ===== */
 .button-group {
@@ -1084,6 +1060,16 @@ h1                { animation-delay: 0.05s; }
     font-size: 14px;
     font-weight: bold;
     transition: border-color 0.2s ease;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+/* 拿掉 number input 內建上下箭頭（外側已有紅綠調整鍵）；選擇器加 input 蓋過通用放大規則 */
+input.adjustment-input-field::-webkit-inner-spin-button,
+input.adjustment-input-field::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    transform: none;
+    margin: 0;
 }
 
 .adjustment-input-field:focus {
@@ -1381,6 +1367,29 @@ h1                { animation-delay: 0.05s; }
 .flu-row.bad {
     background: #ffebee;
     border: 1px solid #ef9a9a;
+    animation: badPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes badPulse {
+    0%, 100% { background-color: #ffebee; box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+    50%      { background-color: #ffcdd2; box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.18); }
+}
+
+/* 👉 手勢：只在紅底列顯示，指向拉選選單引導點選 */
+.flu-hand {
+    display: none;
+}
+
+.flu-row.bad .flu-hand {
+    display: inline-block;
+    font-size: 18px;
+    flex-shrink: 0;
+    animation: handNudge 0.9s ease-in-out infinite;
+}
+
+@keyframes handNudge {
+    0%, 100% { transform: translateX(0); }
+    50%      { transform: translateX(7px); }
 }
 
 .flu-row.bad .flu-name {
@@ -1633,6 +1642,85 @@ h1                { animation-delay: 0.05s; }
         font-size: 12px;
         line-height: 1.4;
     }
+
+    /* 針數調整鍵列印時隱藏，只留「XX+XX 針」 */
+    .needle-adjuster {
+        display: none !important;
+    }
+
+    /* 排版美化：針數框與段落留適當間距 */
+    #result .box {
+        padding: 6px 12px !important;
+        margin-bottom: 7px !important;
+        border-radius: 4px;
+    }
+
+    #result .box strong {
+        font-size: 14px !important;
+    }
+
+    .needle-count {
+        font-size: 16px !important;
+    }
+
+    #result .section {
+        margin-bottom: 10px !important;
+    }
+
+    #result h3 {
+        margin: 8px 0 4px !important;
+        font-size: 14px;
+    }
+
+    #result .section > div {
+        margin: 3px 0 !important;
+    }
+
+    .stats-meta {
+        margin-bottom: 10px !important;
+    }
+
+    /* 資料量自適應行距（printPage 依人數掛 class） */
+    body.print-loose #result .section > div {
+        line-height: 2.1 !important;
+        font-size: 13px !important;
+    }
+
+    body.print-dense #result .section > div {
+        line-height: 1.35 !important;
+        font-size: 11px !important;
+    }
+
+    body.print-dense #result .section {
+        margin-bottom: 6px !important;
+    }
+
+    /* 長名單段落：允許跨頁並於標題標示 */
+    #result .sec-long {
+        page-break-inside: auto !important;
+    }
+
+    #result .sec-long h3::after {
+        content: "（名單長，續下一頁）";
+        font-size: 10px;
+        color: #777;
+        font-weight: 400;
+        margin-left: 6px;
+    }
+
+    /* 流感特殊身分別檢核表：獨立一頁（printPage 有資料時掛 .on） */
+    #fluSpecialPrint.on {
+        display: block !important;
+        page-break-before: always;
+        padding: 12px !important;
+    }
+
+    #fluSpecialPrint th,
+    #fluSpecialPrint td {
+        border: 1px solid #555 !important;
+        padding: 6px 8px !important;
+        text-align: center;
+    }
 }
 
 /* ===== 尊重使用者偏好：reduced motion ===== */
@@ -1664,20 +1752,17 @@ h1                { animation-delay: 0.05s; }
 
             <!-- ===== HIS 掛號檔（選傳）：夾帶後自動加計進針數與名單群組 ===== -->
             <div class="phis-upload-row" id="phisUploadRow">
-                <div class="phis-card k" id="phisCard_k" data-tip="HIS 新冠掛號檔（優待別 6K）&#10;選傳：NIIS 名單沒有的人會自動加進針數與群組&#10;名字旁以 (HIS) 備註">
-                    <button type="button" class="phis-clear" onclick="clearPhis('k')">✕</button>
+                <div class="phis-card k" id="phisCard_k" data-tip="HIS 新冠掛號檔（優待別 6K）&#10;選傳：NIIS 名單沒有的人會自動加進針數與群組&#10;重新夾帶即替換檔案">
                     <div class="phis-card-title">HIS 6K 新冠 <small>(選傳)</small></div>
                     <div class="phis-file-btn"><input type="file" accept=".csv" id="phisFile_k" onchange="handlePhisSelected('k')"><span id="phisHint_k">夾帶 6K 掛號檔</span></div>
                     <div class="phis-file-name" id="phisName_k"></div>
                 </div>
-                <div class="phis-card z" id="phisCard_z" data-tip="HIS 流感掛號檔（優待別 6Z）&#10;選傳：NIIS 名單沒有的人會自動加進針數與群組&#10;名字旁以 (HIS) 備註">
-                    <button type="button" class="phis-clear" onclick="clearPhis('z')">✕</button>
+                <div class="phis-card z" id="phisCard_z" data-tip="HIS 流感掛號檔（優待別 6Z）&#10;選傳：NIIS 名單沒有的人會自動加進針數與群組&#10;重新夾帶即替換檔案">
                     <div class="phis-card-title">HIS 6Z 流感 <small>(選傳)</small></div>
                     <div class="phis-file-btn"><input type="file" accept=".csv" id="phisFile_z" onchange="handlePhisSelected('z')"><span id="phisHint_z">夾帶 6Z 掛號檔</span></div>
                     <div class="phis-file-name" id="phisName_z"></div>
                 </div>
-                <div class="phis-card v" id="phisCard_v" data-tip="HIS 肺鏈掛號檔（優待別 6V）&#10;選傳：NIIS 名單沒有的人會自動加進針數與群組&#10;名字旁以 (HIS) 備註">
-                    <button type="button" class="phis-clear" onclick="clearPhis('v')">✕</button>
+                <div class="phis-card v" id="phisCard_v" data-tip="HIS 肺鏈掛號檔（優待別 6V）&#10;選傳：NIIS 名單沒有的人會自動加進針數與群組&#10;重新夾帶即替換檔案">
                     <div class="phis-card-title">HIS 6V 肺鏈 <small>(選傳)</small></div>
                     <div class="phis-file-btn"><input type="file" accept=".csv" id="phisFile_v" onchange="handlePhisSelected('v')"><span id="phisHint_v">夾帶 6V 掛號檔</span></div>
                     <div class="phis-file-name" id="phisName_v"></div>
@@ -1687,7 +1772,7 @@ h1                { animation-delay: 0.05s; }
             <div class="button-group">
                 <button type="button" class="big-button print-button" id="printButton" onclick="printPage()">一鍵列印</button>
                 <button type="button" class="big-button send-button" id="sendButton" onclick="showSendModal()">寄給承辦</button>
-                <button type="button" class="big-button export-button" id="exportButton" data-tip="把 HIS 檔中 NIIS 名單沒有的人&#10;產成媒體資料上傳檔（Big5 CSV）&#10;可直接匯入 NIIS" onclick="openExport()">產 NIIS 匯入檔</button>
+                <button type="button" class="big-button export-button" id="exportButton" data-tip="設定身分別並把 HIS 檔中 NIIS 名單沒有的人&#10;產成媒體資料上傳檔（Big5 CSV）&#10;可直接匯入 NIIS" onclick="openExport()">身分別設定與匯出</button>
             </div>
         </form>
 
@@ -1699,6 +1784,9 @@ h1                { animation-delay: 0.05s; }
             <div id="blankLine" style="text-align: center; margin-top: 50px; display: none;">
                 <div class="blank-message">以下空白</div>
             </div>
+
+            <!-- 流感特殊身分別檢核表（僅列印時顯示，獨立一頁） -->
+            <div id="fluSpecialPrint" style="display: none;"></div>
         </div>
     </div>
 
@@ -1840,7 +1928,7 @@ h1                { animation-delay: 0.05s; }
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v4.2</div>
+    <div class="version-tag">v4.3</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -1999,15 +2087,6 @@ h1                { animation-delay: 0.05s; }
             });
         }
 
-        function clearPhis(slot) {
-            if (slot === 'z') { fluPersonCodes = {}; fluPersonList = []; }
-            phisFiles[slot] = null;
-            document.getElementById('phisCard_' + slot).classList.remove('attached');
-            document.getElementById('phisName_' + slot).textContent = '';
-            updateExportButton();
-            if (currentFile) startStatistics(currentFile);
-        }
-
         function updateExportButton() {
             document.getElementById('exportButton').style.display =
                 (phisFiles.k || phisFiles.z || phisFiles.v) ? 'inline-block' : 'none';
@@ -2083,8 +2162,74 @@ h1                { animation-delay: 0.05s; }
         }
 
         function fluDefaultCode() {
-            var idc = (exportConfig && exportConfig.idCodes) || {};
+            var idc = (exportConfig && exportConfig.idCodes) || { fluIn: 'F03A', fluOut: 'F03B' };
             return expOutpost ? (idc.fluOut || 'F03B') : (idc.fluIn || 'F03A');
+        }
+
+        // 流感對象別代碼清單：優先用雲端設定（齒輪可編輯），否則內建附件14
+        function fluCodeList() {
+            if (exportConfig && exportConfig.fluCodeTable && exportConfig.fluCodeTable.length) return exportConfig.fluCodeTable;
+            var out = [];
+            for (var i = 0; i < FLU_CODE_OPTIONS.length; i++) out.push({ code: FLU_CODE_OPTIONS[i][0], label: FLU_CODE_OPTIONS[i][1] });
+            return out;
+        }
+
+        /* 主頁浮標「目前身分別」動態計算（設定/拉選/場次切換即時反映） */
+        function refYearMonth() {
+            var el = document.getElementById('expDate');
+            var roc = el ? isoToRoc(el.value) : '';
+            if (roc) return { y: rocYearOfJs(roc), m: parseInt(roc.slice(3, 5), 10) };
+            var d = new Date();
+            return { y: d.getFullYear() - 1911, m: d.getMonth() + 1 };
+        }
+
+        // 內建預設規則（exportConfig 雲端載入前的 fallback，與後端預設一致）
+        var DEFAULT_RULES = {
+            idCodes: { fluIn: 'F03A', fluOut: 'F03B' },
+            fluRule: { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 },
+            covidTable: [
+                { max: 4, code: 'C15' }, { max: 11, code: 'C14' }, { max: 17, code: 'C17' },
+                { max: 49, code: 'C12' }, { max: 64, code: 'C10' }, { max: 74, code: 'C11' },
+                { max: 999, code: 'C08A' }
+            ]
+        };
+
+        function identityLinesFor(t) {
+            var rulesCfg = exportConfig || DEFAULT_RULES;
+            var fams = (t.getAttribute('data-fams') || '').split(',').filter(function(x) { return x; });
+            if (fams.length === 0) return '';
+            var pid = t.getAttribute('data-pid') || '';
+            var by = rocYearOfJs(t.getAttribute('data-birth') || '');
+            var ref = refYearMonth();
+            var age = (by == null || ref.y == null) ? null : (ref.y - by);
+            var lines = [];
+            for (var i = 0; i < fams.length; i++) {
+                var f = fams[i];
+                if (f === 'corona') {
+                    var code = '';
+                    if (age != null) {
+                        var tb = rulesCfg.covidTable || [];
+                        for (var c = 0; c < tb.length; c++) { if (age <= tb[c].max) { code = tb[c].code; break; } }
+                    }
+                    lines.push('新冠身分別：' + (code ? code + '（依年齡自動）' : '⚠ 缺出生無法判斷'));
+                } else if (f === 'flu') {
+                    var picked = fluPersonCodes[pid];
+                    if (picked) {
+                        lines.push('流感身分別：' + picked + '（個別拉選）');
+                    } else {
+                        var r = rulesCfg.fluRule || { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 };
+                        var minAge = (ref.m === r.specialMonth) ? r.specialMinAge : r.normalMinAge;
+                        if (age != null && age >= minAge) {
+                            lines.push('流感身分別：' + fluDefaultCode() + '（預設・' + (expOutpost ? '外設' : '所內') + '）');
+                        } else {
+                            lines.push('流感身分別：⚠ 不符公費門檻（需滿 ' + minAge + ' 歲），請至匯出面板拉選');
+                        }
+                    }
+                } else if (f === 'lung') {
+                    lines.push('肺鏈身分別：免填');
+                }
+            }
+            return lines.join('\n');
         }
 
         function updateDateRoc() {
@@ -2132,9 +2277,10 @@ h1                { animation-delay: 0.05s; }
         }
 
         function fluOptionsHtml(defaultLabel) {
+            var list = fluCodeList();
             var opts = '<option value="">' + defaultLabel + '</option>';
-            for (var o = 0; o < FLU_CODE_OPTIONS.length; o++) {
-                opts += '<option value="' + FLU_CODE_OPTIONS[o][0] + '">' + FLU_CODE_OPTIONS[o][0] + ' ' + FLU_CODE_OPTIONS[o][1] + '</option>';
+            for (var o = 0; o < list.length; o++) {
+                opts += '<option value="' + escAttr(list[o].code) + '">' + escAttr(list[o].code + ' ' + (list[o].label || '')) + '</option>';
             }
             return opts;
         }
@@ -2148,6 +2294,15 @@ h1                { animation-delay: 0.05s; }
                 v: { icon: '🫁', title: '肺鏈 6V', note: '身分別：免填' }
             };
             var html = '';
+
+            // 記憶值自動填（datalist）：疫苗種類代號／批號（匯入或手動新增過的都列入）
+            var dlT = {}, dlL = {};
+            (cfg.batches || []).forEach(function(b) {
+                if (b.type) dlT[b.type] = 1;
+                if (b.lot) dlL[b.lot] = 1;
+            });
+            html += '<datalist id="dlTypes">' + Object.keys(dlT).map(function(t) { return '<option value="' + escAttr(t) + '">'; }).join('') + '</datalist>';
+            html += '<datalist id="dlLots">' + Object.keys(dlL).map(function(l) { return '<option value="' + escAttr(l) + '">'; }).join('') + '</datalist>';
 
             // ── 容器 1：檔案上傳與共用設定 ──
             html += '<div class="exp-sec common">';
@@ -2170,7 +2325,11 @@ h1                { animation-delay: 0.05s; }
                 html += '<div class="exp-sec ' + slot + '">';
                 html += '<div class="exp-sec-title">' + sec.icon + ' ' + sec.title + '｜<span style="font-weight:400;font-size:0.9rem;">' + escAttr(phisFiles[slot].name) + '</span>';
                 if (slot === 'z') {
-                    html += '<button type="button" class="exp-toggle' + (expOutpost ? ' on' : '') + '" style="margin-left:auto;" data-tip="切換本場是否為外設站&#10;未拉選者預設代號：所內 ' + escAttr((cfg.idCodes || {}).fluIn || 'F03A') + ' ↔ 外設 ' + escAttr((cfg.idCodes || {}).fluOut || 'F03B') + '&#10;已個別拉選者不受影響" onclick="toggleOutpost()">' + (expOutpost ? '🚩 外設站（' + escAttr((cfg.idCodes || {}).fluOut || 'F03B') + '）' : '🏠 所內（' + escAttr((cfg.idCodes || {}).fluIn || 'F03A') + '）') + '</button>';
+                    var fluIn = escAttr((cfg.idCodes || {}).fluIn || 'F03A');
+                    var fluOut = escAttr((cfg.idCodes || {}).fluOut || 'F03B');
+                    html += '<span style="margin-left:auto;font-size:0.92rem;font-weight:400;color:#475569;">目前設定是：<b style="color:#1565c0;">' +
+                        (expOutpost ? '🚩 所外 ' + fluOut : '🏠 所內 ' + fluIn) + '</b></span>';
+                    html += '<button type="button" class="exp-toggle' + (expOutpost ? ' on' : '') + '" data-tip="切換所內／所外（外設站）&#10;未拉選者預設代號：所內 ' + fluIn + ' ↔ 所外 ' + fluOut + '&#10;已個別拉選者不受影響" onclick="toggleOutpost()">切換</button>';
                 }
                 html += '</div>';
                 if (sec.note) html += '<div style="font-size:12.5px;color:#7f8c8d;margin:-4px 0 8px;">' + sec.note + '</div>';
@@ -2193,8 +2352,8 @@ h1                { animation-delay: 0.05s; }
                 html += '<button type="button" class="s-btn s-del" data-tip="從記憶清單移除目前選中的針劑" onclick="removeBatch(\'' + slot + '\')">刪除</button>';
                 html += '</div>';
                 html += '<div class="settings-row-head" style="align-items:flex-end;margin-top:6px;margin-bottom:0;">';
-                html += '<div class="s-field" style="flex:1;min-width:150px;"><span class="s-cap">手動新增：疫苗種類代號</span><input class="s-input" id="expNewType_' + slot + '" placeholder="例：CoV_Moderna_LP"></div>';
-                html += '<div class="s-field" style="flex:1;min-width:150px;"><span class="s-cap">批號</span><input class="s-input" id="expNewLot_' + slot + '" placeholder="例：3053857_1150826-CDC"></div>';
+                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的代號會自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">手動新增：疫苗種類代號</span><input class="s-input" id="expNewType_' + slot + '" list="dlTypes" placeholder="例：CoV_Moderna_LP"></div>';
+                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的批號會自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">批號</span><input class="s-input" id="expNewLot_' + slot + '" list="dlLots" placeholder="例：3053857_1150826-CDC"></div>';
                 html += '<button type="button" class="s-btn s-copy" onclick="addManualBatch(\'' + slot + '\')">加入</button>';
                 html += '</div>';
 
@@ -2302,6 +2461,7 @@ h1                { animation-delay: 0.05s; }
                     html += '<div class="flu-row' + (inNiis ? ' skip' : '') + '" id="fluRow_' + i + '">';
                     html += '<input type="checkbox" id="fluChk_' + i + '" style="width:18px;height:18px;flex-shrink:0;"' + (inNiis ? ' disabled' : '') + '>';
                     html += '<span class="flu-name" style="min-width:150px;font-weight:600;" id="fluName_' + i + '">' + escAttr(p.name) + '</span>';
+                    html += '<span class="flu-hand">👉</span>';
                     html += '<select class="s-input" id="expFluSel_' + i + '" style="flex:1;" onchange="updateFluRowStates()"' + (inNiis ? ' disabled' : '') + '>' + opts + '</select>';
                     html += '</div>';
                 }
@@ -2328,10 +2488,16 @@ h1                { animation-delay: 0.05s; }
                 var nameEl = document.getElementById('fluName_' + i);
                 if (!row || !sel || !nameEl) continue;
                 var p = fluPersonList[i];
+                // 即時同步個別拉選（主頁浮標「目前身分別」據此顯示）
+                if (!sel.disabled) {
+                    if (sel.value) fluPersonCodes[p.id] = sel.value;
+                    else delete fluPersonCodes[p.id];
+                }
                 var age = fluAgeOf(p);
                 nameEl.textContent = p.name + (age != null ? '（' + age + ' 歲）' : '（缺出生）');
                 if (fluNiisIds[p.id]) {
-                    // NIIS 流感名單已有：產檔會自動略過，不列入紅底判斷
+                    // NIIS 流感名單已有：產檔會自動略過，不列入紅底判斷；清除殘留拉選避免進特殊清單
+                    delete fluPersonCodes[p.id];
                     row.classList.remove('bad');
                     row.setAttribute('data-tip', '流感已在 NIIS 名單，產檔時自動略過\n身分證：' + p.id + (p.birth ? '\n出生：' + p.birth : ''));
                     continue;
@@ -2389,22 +2555,61 @@ h1                { animation-delay: 0.05s; }
             renderExport();
         }
 
-        /* 特殊身分別清單列印（個別拉選者；可排序＋大勾選框供核對憑證留存） */
-        function printFluSpecialList() {
-            collectExportInputs();
+        // 特殊身分別（個別拉選）人員列 — 列印視窗/一鍵列印附頁/寄信共用
+        function collectFluSpecialRows() {
             var rows = [];
+            var fcl = fluCodeList();
             for (var i = 0; i < fluPersonList.length; i++) {
                 var p = fluPersonList[i];
+                if (fluNiisIds[p.id]) continue;   // NIIS 已有者不列（產檔也會略過）
                 var code = fluPersonCodes[p.id];
                 if (!code) continue;
                 var codeName = '';
-                for (var o = 0; o < FLU_CODE_OPTIONS.length; o++) {
-                    if (FLU_CODE_OPTIONS[o][0] === code) { codeName = FLU_CODE_OPTIONS[o][1]; break; }
+                for (var o = 0; o < fcl.length; o++) {
+                    if (fcl[o].code === code) { codeName = fcl[o].label || ''; break; }
                 }
                 var age = fluAgeOf(p);
                 rows.push({ name: p.name, sex: p.sex || '', birth: p.birth || '', age: (age == null ? '' : age),
                             id: p.id, code: code, codeName: codeName });
             }
+            rows.sort(function(a, b) { return a.name.localeCompare(b.name, 'zh-Hant'); });
+            return rows;
+        }
+
+        // 靜態檢核表 HTML（一鍵列印附頁與寄信 PDF 用；大勾選框＋簽章欄）
+        function fluSpecialStaticHtml(rows) {
+            var meta = '接種日期：民國 ' + (currentRocDate() || isoToRoc(defaultThursdayISO())) +
+                '　場次：' + (expOutpost ? '所外' : '所內') + '　共 ' + rows.length + ' 人';
+            var h = '<h2 style="text-align:center;margin:0 0 6px;font-size:17px;">流感特殊身分別清單（憑證留存核對）</h2>';
+            h += '<div style="text-align:center;color:#555;font-size:13px;margin-bottom:10px;">' + meta + '</div>';
+            h += '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>';
+            var heads = ['憑證留存', '姓名', '性別', '出生', '年齡', '身分證字號', '身分別'];
+            for (var hh = 0; hh < heads.length; hh++) {
+                h += '<th style="border:1px solid #555;padding:6px 8px;background:#f0f0f0;">' + heads[hh] + '</th>';
+            }
+            h += '</tr></thead><tbody>';
+            for (var r = 0; r < rows.length; r++) {
+                var p = rows[r];
+                h += '<tr>';
+                h += '<td style="border:1px solid #555;padding:6px 8px;text-align:center;width:64px;"><span style="display:inline-block;width:28px;height:28px;border:2.5px solid #333;border-radius:4px;"></span></td>';
+                h += '<td style="border:1px solid #555;padding:6px 8px;text-align:center;">' + escAttr(p.name) + '</td>';
+                h += '<td style="border:1px solid #555;padding:6px 8px;text-align:center;">' + escAttr(p.sex) + '</td>';
+                h += '<td style="border:1px solid #555;padding:6px 8px;text-align:center;">' + escAttr(p.birth) + '</td>';
+                h += '<td style="border:1px solid #555;padding:6px 8px;text-align:center;">' + escAttr(String(p.age)) + '</td>';
+                h += '<td style="border:1px solid #555;padding:6px 8px;text-align:center;">' + escAttr(p.id) + '</td>';
+                h += '<td style="border:1px solid #555;padding:6px 8px;text-align:center;">' + escAttr(p.code + ' ' + p.codeName) + '</td>';
+                h += '</tr>';
+            }
+            h += '</tbody></table>';
+            h += '<div style="margin-top:24px;font-size:14px;display:flex;justify-content:space-between;">' +
+                '<span>核對人員簽章：＿＿＿＿＿＿＿＿</span><span>主管核章：＿＿＿＿＿＿＿＿</span><span>日期：＿＿＿＿＿＿＿＿</span></div>';
+            return h;
+        }
+
+        /* 特殊身分別清單列印（個別拉選者；可排序＋大勾選框供核對憑證留存） */
+        function printFluSpecialList() {
+            collectExportInputs();
+            var rows = collectFluSpecialRows();
             if (rows.length === 0) { showModal('目前沒有個別拉選（特殊身分別）的人員！'); return; }
 
             var meta = '接種日期：民國 ' + currentRocDate() + '　場次：' + (expOutpost ? '外設站' : '所內') +
@@ -2640,6 +2845,20 @@ h1                { animation-delay: 0.05s; }
             html += '<div class="s-field" data-tip="特別月份需滿此歲數"><span class="s-cap">特別月份門檻(歲)</span><input class="s-input" id="ruleSpecAge" type="number" min="0" max="120" style="width:110px;text-align:center;" value="' + escAttr(String(cfg.fluRule.specialMinAge)) + '"></div>';
             html += '<div class="s-field" data-tip="其他月份（含跨年度 1~9 月）需滿此歲數"><span class="s-cap">其他月份門檻(歲)</span><input class="s-input" id="ruleNormAge" type="number" min="0" max="120" style="width:110px;text-align:center;" value="' + escAttr(String(cfg.fluRule.normalMinAge)) + '"></div>';
             html += '</div><div style="font-size:12.5px;color:#7f8c8d;margin-top:8px;">年齡不符門檻者會紅底提醒，需個別拉選例外身分別才能產檔。</div></div>';
+            // 流感對象別代碼表（附件14，可編輯；名單拉選選單同步使用）
+            html += '<div class="settings-row"><div style="font-weight:600;margin-bottom:8px;" data-tip="附件14 對象別代碼對照表&#10;名單「個別拉選」選單就是用這份&#10;可修改代碼/名稱、新增、刪除">💉 流感：對象別代碼表（拉選選單）</div>';
+            html += '<div id="ruleFluTable">';
+            var fcl2 = fluCodeList();
+            for (var fi = 0; fi < fcl2.length; fi++) {
+                html += '<div class="settings-row-head" style="margin-bottom:4px;align-items:center;" id="ruleFluRow_' + fi + '">';
+                html += '<input class="s-input" id="ruleFluCode_' + fi + '" style="width:100px;text-align:center;" value="' + escAttr(fcl2[fi].code) + '">';
+                html += '<input class="s-input" id="ruleFluLabel_' + fi + '" style="flex:1;min-width:220px;" value="' + escAttr(fcl2[fi].label || '') + '">';
+                html += '<button type="button" class="s-btn s-del" onclick="ruleFluDelRow(' + fi + ')">刪除</button>';
+                html += '</div>';
+            }
+            html += '</div>';
+            html += '<button type="button" class="s-btn s-copy" style="margin-top:6px;" onclick="ruleFluAddRow()">＋ 新增代碼</button>';
+            html += '</div>';
             document.getElementById('ruleBody').innerHTML = html;
             document.getElementById('ruleModal').classList.add('show');
         }
@@ -2648,23 +2867,62 @@ h1                { animation-delay: 0.05s; }
             document.getElementById('ruleModal').classList.remove('show');
         }
 
-        function saveRuleSettings() {
+        // 流感代碼表列增刪（先收集畫面值再重繪，避免輸入遺失）
+        function ruleFluCollect() {
+            var list = [];
+            for (var i = 0; ; i++) {
+                var codeEl = document.getElementById('ruleFluCode_' + i);
+                if (!codeEl) break;
+                list.push({ code: codeEl.value.trim().toUpperCase(),
+                            label: document.getElementById('ruleFluLabel_' + i).value.trim() });
+            }
+            return list;
+        }
+
+        // 收集設定面板「全部」輸入回 exportConfig（未存雲端；增刪列重繪與儲存共用，避免編輯遺失）
+        function collectRuleInputs() {
             var cfg = exportConfig;
             for (var i = 0; i < cfg.covidTable.length; i++) {
                 var el = document.getElementById('ruleCov_' + i);
                 if (el && el.value.trim()) cfg.covidTable[i].code = el.value.trim().toUpperCase();
             }
-            cfg.idCodes.fluIn = (document.getElementById('ruleFluIn').value.trim() || 'F03A').toUpperCase();
-            cfg.idCodes.fluOut = (document.getElementById('ruleFluOut').value.trim() || 'F03B').toUpperCase();
-            var toNum = function(id, def) {
-                var v = parseInt(document.getElementById(id).value, 10);
-                return isNaN(v) ? def : v;   // 允許 0（不限齡），只有空/非數字才用預設
-            };
-            cfg.fluRule = {
-                specialMonth: toNum('ruleMonth', 10) || 10,
-                specialMinAge: toNum('ruleSpecAge', 65),
-                normalMinAge: toNum('ruleNormAge', 50)
-            };
+            var fin = document.getElementById('ruleFluIn');
+            if (fin) {
+                cfg.idCodes.fluIn = (fin.value.trim() || 'F03A').toUpperCase();
+                cfg.idCodes.fluOut = (document.getElementById('ruleFluOut').value.trim() || 'F03B').toUpperCase();
+                var toNum = function(id, def) {
+                    var v = parseInt(document.getElementById(id).value, 10);
+                    return isNaN(v) ? def : v;   // 允許 0（不限齡），只有空/非數字才用預設
+                };
+                cfg.fluRule = {
+                    specialMonth: toNum('ruleMonth', 10) || 10,
+                    specialMinAge: toNum('ruleSpecAge', 65),
+                    normalMinAge: toNum('ruleNormAge', 50)
+                };
+            }
+        }
+
+        function ruleFluAddRow() {
+            collectRuleInputs();
+            var list = ruleFluCollect();
+            list.push({ code: '', label: '' });
+            exportConfig.fluCodeTable = list;   // 空列暫存供輸入，儲存時過濾
+            openRuleSettings();
+        }
+
+        function ruleFluDelRow(idx) {
+            collectRuleInputs();
+            var list = ruleFluCollect();
+            list.splice(idx, 1);
+            exportConfig.fluCodeTable = list.filter(function(x) { return x.code; });
+            if (exportConfig.fluCodeTable.length === 0) exportConfig.fluCodeTable = null;
+            openRuleSettings();
+        }
+
+        function saveRuleSettings() {
+            var cfg = exportConfig;
+            collectRuleInputs();
+            cfg.fluCodeTable = ruleFluCollect().filter(function(x) { return x.code; });
             showFx('loading', '儲存設定中', '');
             google.script.run
                 .withSuccessHandler(function(res) {
@@ -2890,11 +3148,35 @@ h1                { animation-delay: 0.05s; }
         }
 
         /* ===== 一鍵列印 ===== */
+        // 資料量自適應：多→窄行距、長段落標「續下一頁」；少→寬行距；特殊身分別檢核表附獨立一頁
+        function preparePrintLayout() {
+            var names = document.querySelectorAll('#result .pname').length;
+            document.body.classList.remove('print-dense', 'print-loose');
+            if (names > 100) document.body.classList.add('print-dense');
+            else if (names < 30) document.body.classList.add('print-loose');
+
+            var secs = document.querySelectorAll('#result .section');
+            for (var i = 0; i < secs.length; i++) {
+                secs[i].classList.toggle('sec-long', secs[i].querySelectorAll('.pname').length > 60);
+            }
+
+            var box = document.getElementById('fluSpecialPrint');
+            var rows = collectFluSpecialRows();
+            if (rows.length > 0) {
+                box.innerHTML = fluSpecialStaticHtml(rows);
+                box.classList.add('on');
+            } else {
+                box.innerHTML = '';
+                box.classList.remove('on');
+            }
+        }
+
         function printPage() {
             if (!hasResult) {
                 showFx('error', '尚無統計結果', '請先夾帶 NIIS 名單完成統計', 2400);
                 return;
             }
+            preparePrintLayout();
             showFx('emoji', '準備列印', '', 0, '🖨️');
             setTimeout(function() {
                 hideFx();
@@ -2961,14 +3243,42 @@ h1                { animation-delay: 0.05s; }
 
         function closeSendModal() { document.getElementById("sendModal").style.display = "none"; }
 
+        // 匯出面板沒開時，用記憶設定組 picks（寄信附匯入檔用）
+        function picksFromMemory() {
+            if (!exportConfig) return null;
+            var picks = { slots: {}, org: exportConfig.org,
+                          date: isoToRoc(exportConfig._uiDateIso || defaultThursdayISO()),
+                          fluCodes: fluPersonCodes, outpost: expOutpost, rules: exportConfig };
+            var lp = exportConfig.lastPick || {};
+            ['k', 'z', 'v'].forEach(function(slot) {
+                if (!phisFiles[slot]) return;
+                if (lp[slot]) {
+                    var parts = lp[slot].split('|');
+                    picks.slots[slot] = { type: parts[0], lot: parts.slice(1).join('|'), dose: '1' };
+                    return;
+                }
+                // 沒記憶：該類別只有一支針劑時自動選
+                var fam = SLOT_FAMILY[slot], cand = null, n = 0;
+                (exportConfig.batches || []).forEach(function(b) {
+                    if (!b.family || b.family === fam) { n++; cand = b; }
+                });
+                if (n === 1) picks.slots[slot] = { type: cand.type, lot: cand.lot, dose: '1' };
+            });
+            return picks;
+        }
+
         function sendEmail() {
             var validEmails = validateEmails();
             if (!validEmails) return;
             var note = document.getElementById("emailNote").value;
             closeSendModal();
-            showFx('loading', '寄送中', '正在產生 PDF 報告並寄送郵件…');
+            showFx('loading', '寄送中', '正在產生報告與附件…');
 
-            var proceed = function(fileContents) {
+            // 特殊身分別清單（有個別拉選才附）
+            var specialRows = collectFluSpecialRows();
+            var specialHtml = specialRows.length > 0 ? fluSpecialStaticHtml(specialRows) : '';
+
+            var proceed = function(fileContents, extraNote) {
                 google.script.run
                     .withSuccessHandler(function(result) {
                         if (result.success) {
@@ -2980,10 +3290,11 @@ h1                { animation-delay: 0.05s; }
                     .withFailureHandler(function(error) {
                         showFx('error', '郵件發送失敗', (error && error.message) || String(error), 4000);
                     })
-                    .sendEmailWithAttachments(document.getElementById('result').innerHTML, note, fileContents, validEmails);
+                    .sendEmailWithAttachments(document.getElementById('result').innerHTML,
+                        note + (extraNote ? '\n' + extraNote : ''), fileContents, validEmails, specialHtml);
             };
 
-            // 附件：NIIS 名單 + 已夾帶的 HIS 掛號檔
+            // 附件：NIIS 名單 + 已夾帶的 HIS 掛號檔（檔名註明來源）
             var filesToAttach = [];
             if (currentFile) filesToAttach.push({ file: currentFile, name: '流感系統名單_' + currentFile.name });
             ['k', 'z', 'v'].forEach(function(slot) {
@@ -2997,7 +3308,32 @@ h1                { animation-delay: 0.05s; }
                     reader.readAsDataURL(f.file);
                 });
             })).then(function(list) {
-                proceed(list.filter(function(x) { return x; }));
+                var files = list.filter(function(x) { return x; });
+                var hasHis = phisFiles.k || phisFiles.z || phisFiles.v;
+                if (!hasHis) { proceed(files); return; }
+                var picks = collectExportInputs() || picksFromMemory();
+                if (!picks) {
+                    proceed(files, '（NIIS 匯入檔未附：設定尚未載入，請先開啟「身分別設定與匯出」面板後重寄）');
+                    return;
+                }
+                // 已設定身分別的 NIIS 匯入檔一併附上（產不出來時註明原因照常寄）
+                var readAll = [currentFile ? readFileAsText(currentFile, 'big5') : Promise.resolve('')];
+                ['k', 'z', 'v'].forEach(function(slot) {
+                    readAll.push(phisFiles[slot] ? readFileAsText(phisFiles[slot], 'big5') : Promise.resolve(''));
+                });
+                Promise.all(readAll).then(function(contents) {
+                    google.script.run
+                        .withSuccessHandler(function(res) {
+                            if (res && res.base64) {
+                                files.push({ name: res.fileName, content: res.base64 });
+                                proceed(files);
+                            } else {
+                                proceed(files, '（NIIS 匯入檔未附：' + ((res && res.errorMessage) || '產檔失敗') + '）');
+                            }
+                        })
+                        .withFailureHandler(function() { proceed(files, '（NIIS 匯入檔未附：產檔失敗）'); })
+                        .buildNiisExport({ k: contents[1], z: contents[2], v: contents[3] }, contents[0], picks);
+                }).catch(function() { proceed(files, '（NIIS 匯入檔未附：檔案讀取失敗）'); });
             });
         }
 
@@ -3117,6 +3453,11 @@ h1                { animation-delay: 0.05s; }
             var tip = document.getElementById('tipBox');
             if (!t) { tip.classList.remove('show'); tip.classList.remove('on'); return; }
             tip.textContent = t.getAttribute('data-tip') || '';
+            // 名單人員：附加「目前身分別」動態行（設定/拉選/場次變更即時反映）
+            if (t.getAttribute('data-fams')) {
+                var extra = identityLinesFor(t);
+                if (extra) tip.textContent += '\n' + extra;
+            }
             tip.classList.add('show');
             positionTip(t);
             void tip.offsetWidth;
@@ -3301,6 +3642,14 @@ h1                { animation-delay: 0.05s; }
             var cb = confirmCallback;
             closeConfirm();
             if (cb) cb();
+        }
+
+        /* ===== 開頁預載產檔設定（主頁浮標「目前身分別」動態計算用） ===== */
+        if (window.google && google.script && google.script.run) {
+            google.script.run
+                .withSuccessHandler(function(cfg) { if (cfg) exportConfig = cfg; })
+                .withFailureHandler(function() {})
+                .getNiisExportConfig();
         }
     </script>
 </body>
