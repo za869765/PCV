@@ -1375,6 +1375,18 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     overflow: hidden;
     padding-top: 10px;
     padding-bottom: 10px;
+    background: #e8ecf1;   /* 未聚焦：暗底色，明顯區分目前工作區 */
+    opacity: 0.72;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+#exportBody.focus .exp-sec:not(.open):hover {
+    background: #f2f5f9;
+    opacity: 1;
+}
+
+#exportBody.focus .exp-sec.open {
+    box-shadow: 0 0 0 2.5px rgba(112, 72, 168, 0.30), 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 #exportBody.focus .exp-sec:not(.open) .exp-sum {
@@ -1384,6 +1396,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 #exportBody.focus .exp-sec.open {
     flex: 1;
     min-height: 0;
+}
+
+#exportBody.focus .exp-sec:not(.open) .exp-sec-title {
+    margin-bottom: 0;
 }
 
 @media (max-width: 1100px) {
@@ -2032,7 +2048,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v4.8</div>
+    <div class="version-tag">v4.9</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
