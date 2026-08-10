@@ -1,0 +1,4 @@
+## 個資保護：任何 CSV（NIIS/PHIS 名單）一律不進 repo
+*.csv
+*.CSV
+test_data/

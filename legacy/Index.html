@@ -1,0 +1,645 @@
+<!-- Index.html -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <title>佳里區衛生所 - 疫苗掛號對針小工具</title>
+    <!-- Google 字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* 基本樣式 */
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #f0f4f8, #d9e2ec);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            color: #2c3e50;
+            font-weight: 700;
+            font-size: 32px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        /* 表單樣式 */
+        .upload-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr); /* 每行兩個卡片 */
+            gap: 40px; /* 增加間距以容納更大的邊框 */
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .upload-card {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+            border-left: 64px solid #3498db; /* 擴大左側邊框厚度 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .upload-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 四種卡片的顏色 */
+        .upload-card.green { border-left-color: #27ae60; }
+        .upload-card.purple { border-left-color: #8e44ad; }
+        .upload-card.red { border-left-color: #e74c3c; }
+        .upload-card.orange { border-left-color: #e67e22; }
+
+        .upload-card label {
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 20px;
+        }
+
+        .upload-card input[type="file"] {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .upload-card input[type="file"]:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+
+        /* 按鈕樣式 */
+        .button-group {
+            text-align: center;
+            margin-top: 50px;
+        }
+
+        .big-button {
+            font-size: 20px;
+            padding: 18px 40px;
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s;
+            margin: 0 20px;
+            display: inline-block;
+        }
+
+        .big-button:hover {
+            background-color: #2980b9;
+            transform: translateY(-5px);
+        }
+
+        .big-button:active {
+            background-color: #1c5980;
+            transform: translateY(0);
+        }
+
+        .print-button {
+            background-color: #2ecc71;
+            display: none; /* 初始隱藏 */
+        }
+
+        .print-button:hover {
+            background-color: #27ae60;
+        }
+
+        /* 分隔線 */
+        .divider {
+            border-top: 2px solid #e0e0e0;
+            margin: 50px 0;
+        }
+
+        /* 結果區域 */
+        #result {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .boxed-title {
+            border-left: 12px solid #3498db;
+            padding-left: 25px;
+            margin-bottom: 25px;
+            background-color: #ecf0f1;
+            border-radius: 8px;
+            font-size: 24px;
+            font-weight: bold;
+            page-break-inside: avoid;
+        }
+
+        .boxed-title.red-text { border-left-color: #e74c3c; }
+        .boxed-title.green-text { border-left-color: #27ae60; }
+        .boxed-title.blue-text { border-left-color: #3498db; }
+        .boxed-title.purple-text { border-left-color: #8e44ad; }
+        .boxed-title.orange-text { border-left-color: #e67e22; }
+        .boxed-title.black-text { border-left-color: #34495e; }
+
+        .sorted-names {
+            display: block;
+            text-align: left;
+            margin-top: 15px;
+            color: #555;
+            font-weight: bold;
+            font-size: 18px;
+            page-break-inside: avoid;
+        }
+
+        /* 新增 section 樣式 */
+        .section {
+            page-break-inside: avoid;
+        }
+
+        /* 輸入校正框 */
+        .correction-container {
+            margin-top: 15px;
+        }
+
+        .correction-toggle {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            color: #3498db;
+            font-weight: bold;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .correction-toggle .plus-icon {
+            font-size: 28px;
+            margin-right: 8px;
+        }
+
+        .correction-inputs {
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .input-correction {
+            height: 45px;
+            width: 250px;
+            padding: 10px 15px;
+            font-size: 20px;
+            text-align: right;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            transition: border-color 0.3s;
+        }
+
+        .input-correction:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+
+        /* 標籤顏色 */
+        .label-jn { color: #27ae60; font-weight: bold; }
+        .label-phis6z { color: #8e44ad; font-weight: bold; }
+        .label-phis6k { color: #e74c3c; font-weight: bold; }
+        .label-phis6v { color: #e67e22; font-weight: bold; }
+
+        /* Modal樣式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 15px;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+
+        .close-btn {
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            padding: 14px 35px;
+            font-size: 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-top: 25px;
+        }
+
+        .close-btn:hover {
+            background-color: #2980b9;
+        }
+
+        /* 加載訊息 */
+        .loading-message {
+            color: #3498db;
+            font-size: 28px;
+            font-weight: 500;
+            text-align: center;
+            margin-top: 30px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        /* 響應式設計 */
+        @media (max-width: 1200px) {
+            .upload-container {
+                grid-template-columns: 1fr 1fr;
+                gap: 30px;
+            }
+        }
+
+        @media (max-width: 800px) {
+            .upload-container {
+                grid-template-columns: 1fr; /* 小螢幕下每行一個卡片 */
+            }
+
+            .input-correction {
+                width: 100%;
+            }
+        }
+
+        /* 放大數字輸入框的箭頭 */
+        /* Chrome, Safari, Edge, Opera */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-transform: scale(1.5);
+            transform: scale(1.5);
+            margin: 0 5px;
+        }
+
+        /* Firefox */
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        input[type=number]::-moz-inner-spin-button,
+        input[type=number]::-moz-outer-spin-button {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* 列印樣式 */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printArea, #printArea * {
+                visibility: visible;
+            }
+            #printArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .section {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>佳里區衛生所 - 疫苗掛號對針小工具</h1>
+
+    <form id="uploadForm">
+        <div class="upload-container">
+            <!-- 系統JN 上傳卡片 -->
+            <div class="upload-card green">
+                <label for="file1">上傳 <span class="label-jn">系統JN</span> 名單 (臺南疫苗系統CSV)：</label>
+                <input type="file" id="file1" accept=".csv" onchange="validateCSVFile('file1', 'JN')">
+            </div>
+
+            <!-- PHIS_6Z 上傳卡片 -->
+            <div class="upload-card purple">
+                <label for="file2">上傳 <span class="label-phis6z">PHIS_6Z</span> 名單 (PHIS_1.6.46_解壓之CSV)：</label>
+                <input type="file" id="file2" accept=".csv" onchange="validateCSVFile('file2', 'Flu')">
+            </div>
+
+            <!-- Phis_6k 上傳卡片 -->
+            <div class="upload-card red">
+                <label for="file3">上傳 <span class="label-phis6k">Phis_6k</span> 名單 (PHIS_1.6.46_解壓之CSV)：</label>
+                <input type="file" id="file3" accept=".csv" onchange="showModal('請自行驗證是否為6k')">
+            </div>
+
+            <!-- Phis_6V 上傳卡片 -->
+            <div class="upload-card orange">
+                <label for="file4">上傳 <span class="label-phis6v">Phis_6V</span> 名單 (PHIS_1.6.46_解壓之CSV)：</label>
+                <input type="file" id="file4" accept=".csv" onchange="showModal('請自行驗證是否為6V')">
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button type="button" class="big-button" id="startButton" onclick="uploadFiles()">開始統計</button>
+            <button type="button" class="big-button print-button" id="printButton" onclick="printPage()">一鍵列印</button>
+        </div>
+    </form>
+
+    <div class="divider"></div>
+
+    <!-- 設定一個id來限制列印範圍 -->
+    <div id="printArea">
+        <div id="result"></div>
+
+        <!-- 最後顯示 "以下空白" -->
+        <div id="blankLine" style="text-align: center; margin-top: 50px; display: none;">
+            <strong style="color: #27ae60; font-size: 24px;">以下空白</strong>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <p id="modal-message"></p>
+            <button class="close-btn" onclick="closeModal()">確認</button>
+        </div>
+    </div>
+
+    <script>
+        // 列印頁面
+        function printPage() {
+            window.print();
+        }
+
+        // 顯示模態框
+        function showModal(message) {
+            var modal = document.getElementById("modal");
+            var modalMessage = document.getElementById("modal-message");
+            modalMessage.textContent = message;
+            modal.style.display = "flex";
+        }
+
+        // 關閉模態框
+        function closeModal() {
+            var modal = document.getElementById("modal");
+            modal.style.display = "none";
+        }
+
+        // 驗證CSV檔案
+        function validateCSVFile(fileInputId, keyword) {
+            var fileInput = document.getElementById(fileInputId).files[0];
+            if (fileInput) {
+                var reader = new FileReader();
+                reader.onload = function(event) {
+                    var content = event.target.result;
+                    var rows = content.split('\n');
+                    if (rows.length < 2) {
+                        showModal('檔案內容不足，請確認檔案格式！');
+                        document.getElementById(fileInputId).value = "";
+                        return;
+                    }
+
+                    // 對於系統JN名單的驗證
+                    if (fileInputId === 'file1') {
+                        var containsJN = false;
+                        for (var i = 1; i < Math.min(rows.length, 100); i++) { // 檢查K2:K99
+                            var columns = rows[i].split(',');
+                            var k2Column = columns[10];  // 檢查K2
+                            if (k2Column && (k2Column.includes("JN") || k2Column.includes("CoV_Moderna_JN"))) {
+                                containsJN = true;
+                                break;
+                            }
+                        }
+                        if (!containsJN) {
+                            showModal('非JN檔案');
+                            document.getElementById(fileInputId).value = "";
+                            return;
+                        }
+                    }
+
+                    // 對於PHIS_6Z名單的驗證
+                    if (fileInputId === 'file2') {
+                        var k2Column = rows[1].split(',')[10];  // 檢查K2
+                        if (!k2Column.includes("Flu")) {
+                            showModal('非6Z檔案');
+                            document.getElementById(fileInputId).value = "";
+                            return;
+                        }
+                    }
+                };
+                reader.readAsText(fileInput, 'big5');
+            }
+        }
+
+        // 上傳檔案並進行統計
+        function uploadFiles() {
+            var file1 = document.getElementById('file1').files[0];
+            var file2 = document.getElementById('file2').files[0];
+            var file3 = document.getElementById('file3').files[0];
+            var file4 = document.getElementById('file4').files[0];
+
+            if (file1 || file2 || file3 || file4) {
+                document.getElementById('result').innerHTML = "<div class='loading-message'>統計中，請稍後...</div>";
+                document.getElementById('printButton').style.display = 'none';
+                document.getElementById('startButton').style.display = 'none'; // 隱藏開始統計按鈕
+
+                // 隱藏 "以下空白" 行
+                document.getElementById('blankLine').style.display = 'none';
+
+                var reader1 = new FileReader();
+                var reader2 = new FileReader();
+                var reader3 = new FileReader();
+                var reader4 = new FileReader();
+
+                var promises = [];
+
+                if (file1) {
+                    promises.push(new Promise((resolve) => {
+                        reader1.onload = function(e) {
+                            resolve(e.target.result);
+                        };
+                        reader1.readAsText(file1, 'big5');
+                    }));
+                } else {
+                    promises.push(Promise.resolve(''));
+                }
+
+                if (file2) {
+                    promises.push(new Promise((resolve) => {
+                        reader2.onload = function(e) {
+                            resolve(e.target.result);
+                        };
+                        reader2.readAsText(file2, 'big5');
+                    }));
+                } else {
+                    promises.push(Promise.resolve(''));
+                }
+
+                if (file3) {
+                    promises.push(new Promise((resolve) => {
+                        reader3.onload = function(e) {
+                            resolve(e.target.result);
+                        };
+                        reader3.readAsText(file3, 'big5');
+                    }));
+                } else {
+                    promises.push(Promise.resolve(''));
+                }
+
+                if (file4) {
+                    promises.push(new Promise((resolve) => {
+                        reader4.onload = function(e) {
+                            resolve(e.target.result);
+                        };
+                        reader4.readAsText(file4, 'big5');
+                    }));
+                } else {
+                    promises.push(Promise.resolve(''));
+                }
+
+                Promise.all(promises).then((contents) => {
+                    google.script.run
+                        .withSuccessHandler(function(result) {
+                            if (result.errorMessage) {
+                                showModal(result.errorMessage);
+                                document.getElementById('result').innerHTML = ""; // 清空結果
+                            } else {
+                                displayResult(result.htmlContent);
+
+                                // 如果有忽略的非新冠資料，顯示彈窗
+                                if (result.nonCoronaCount > 0) {
+                                    showModal('共有 ' + result.nonCoronaCount + ' 筆JN檔的非新冠資料已忽略');
+                                }
+
+                                document.getElementById('printButton').style.display = 'inline-block';
+
+                                // 顯示 "以下空白" 行
+                                document.getElementById('blankLine').style.display = 'block';
+                            }
+                            document.getElementById('startButton').style.display = 'inline-block'; // 重新顯示開始統計按鈕
+                        })
+                        .compareCSVFiles(contents[0], contents[1], contents[2], contents[3]);
+                });
+            } else {
+                showModal('請至少上傳一個檔案！');
+            }
+        }
+
+        // 顯示統計結果
+        function displayResult(result) {
+            document.getElementById('result').innerHTML = result;
+            addToggleEventListeners();
+        }
+
+        // 添加校正輸入框的展開/隱藏事件
+        function addToggleEventListeners() {
+            var toggles = document.querySelectorAll('.correction-toggle');
+            toggles.forEach(function(toggle) {
+                toggle.addEventListener('click', function() {
+                    var targetId = this.getAttribute('data-target');
+                    var inputs = document.getElementById(targetId);
+                    if (inputs.style.display === 'none' || inputs.style.display === '') {
+                        inputs.style.display = 'flex';
+                        this.querySelector('.plus-icon').textContent = '-';
+                    } else {
+                        inputs.style.display = 'none';
+                        this.querySelector('.plus-icon').textContent = '+';
+                    }
+                });
+            });
+        }
+
+        // 更新新冠消耗
+        function updateNewCoronaShots() {
+            var multiCorrection = parseInt(document.getElementById('newCoronaCorrection').value) || 0;
+            var singleCorrection = parseInt(document.getElementById('newCoronaSingleCorrection').value) || 0;
+            var originalShots = parseInt(document.getElementById('newCoronaCount').getAttribute('data-original')) || 0;
+            var newCount = (originalShots - multiCorrection) + singleCorrection;
+
+            // 構建顯示文本
+            var displayText = newCount + " 針";
+            var correctionNotes = [];
+
+            if (multiCorrection > 0) {
+                correctionNotes.push("已扣多劑型 " + multiCorrection + " 針");
+            }
+            if (singleCorrection > 0) {
+                correctionNotes.push("已加手抄未掛校正-單劑型 " + singleCorrection + " 針");
+            }
+
+            if (correctionNotes.length > 0) {
+                displayText += " (" + correctionNotes.join(", ") + ")";
+            }
+
+            document.getElementById('newCoronaCount').innerHTML = displayText;
+        }
+
+        // 更新流感消耗
+        function updateFluShots() {
+            var secondBrandCorrection = parseInt(document.getElementById('fluCorrection').value) || 0;
+            var schoolCorrection = parseInt(document.getElementById('fluCorrection2').value) || 0;
+            var originalShots = parseInt(document.getElementById('fluCount').getAttribute('data-original')) || 0;
+            // 修改計算方式：將原本的減法改為加法
+            var newCount = (originalShots - secondBrandCorrection) + schoolCorrection;
+
+            // 構建顯示文本
+            var displayText = newCount + " 針";
+            var correctionNotes = [];
+
+            if (secondBrandCorrection > 0) {
+                correctionNotes.push("已扣次要廠牌校正 " + secondBrandCorrection + " 針");
+            }
+            if (schoolCorrection > 0) {
+                correctionNotes.push("已加補接種未掛校正 " + schoolCorrection + " 針");
+            }
+
+            if (correctionNotes.length > 0) {
+                displayText += " (" + correctionNotes.join(", ") + ")";
+            }
+
+            document.getElementById('fluCount').innerHTML = displayText;
+        }
+
+        // 更新肺鏈消耗
+        function updateLungChainShots() {
+            var correction = parseInt(document.getElementById('lungChainCorrection').value) || 0;
+            var originalShots = parseInt(document.getElementById('lungChainCount').getAttribute('data-original')) || 0;
+            var newCount = originalShots - correction;
+
+            // 構建顯示文本
+            var displayText = newCount + " 針";
+            var correctionNotes = [];
+
+            if (correction > 0) {
+                correctionNotes.push("已扣23PPV校正 " + correction + " 針");
+            }
+
+            if (correctionNotes.length > 0) {
+                displayText += " (" + correctionNotes.join(", ") + ")";
+            }
+
+            document.getElementById('lungChainCount').innerHTML = displayText;
+        }
+    </script>
+</body>
+</html>
