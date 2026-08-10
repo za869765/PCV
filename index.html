@@ -1305,24 +1305,28 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     max-height: none;
     flex: 1;
     background: #f3f4f6;
+    display: flex;
+    flex-direction: column;
 }
 
 #exportModal .custom-modal-footer {
     flex-shrink: 0;
 }
 
-/* 橫式全螢幕 2×2 四宮格：檔案共用/新冠/流感/肺鏈各一角 */
+/* 橫式全螢幕 2×2 四宮格：固定四大格吃滿整頁高度，內容在格內展開 */
 #exportBody {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
     gap: 14px;
-    align-items: stretch;
+    flex: 1;
+    min-height: 0;
 }
 
 #exportBody .exp-sec {
     margin-bottom: 0;
     overflow-y: auto;
-    align-self: start;
+    min-height: 0;
 }
 
 #exportBody .exp-sec.empty {
@@ -1356,11 +1360,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     display: none;
 }
 
-#exportBody .exp-sec.open {
-    grid-column: 1 / -1;
-    max-height: calc(100vh - 235px);
-}
-
 #exportBody .exp-sec.open .exp-sum {
     display: none;
 }
@@ -1368,11 +1367,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 @media (max-width: 1100px) {
     #exportBody {
         grid-template-columns: 1fr;
-    }
-
-    #exportBody .exp-sec.open {
-        grid-column: auto;
-        max-height: none;
+        grid-template-rows: none;
     }
 }
 
@@ -2015,7 +2010,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v4.6</div>
+    <div class="version-tag">v4.7</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
