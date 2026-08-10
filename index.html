@@ -232,7 +232,7 @@ h1::after {
     min-height: 1.2em;
 }
 
-/* ===== PHIS 對針檔（選傳）上傳列 ===== */
+/* ===== HIS 掛號檔（選傳）上傳列 ===== */
 .phis-upload-row {
     display: flex;
     gap: 16px;
@@ -1524,23 +1524,23 @@ h1                { animation-delay: 0.05s; }
                 <div class="main-file-name" id="mainFileName"></div>
             </div>
 
-            <!-- ===== PHIS 對針檔（選傳）：夾帶後自動與 NIIS 名單交叉對針 ===== -->
+            <!-- ===== HIS 掛號檔（選傳）：夾帶後自動加計進針數與名單群組 ===== -->
             <div class="phis-upload-row" id="phisUploadRow">
-                <div class="phis-card k" id="phisCard_k" data-tip="PHIS 新冠掛號檔（優待別 6K）&#10;選傳：夾帶後自動與 NIIS 名單交叉對針&#10;列出兩邊不一致的名單">
+                <div class="phis-card k" id="phisCard_k" data-tip="HIS 新冠掛號檔（優待別 6K）&#10;選傳：NIIS 名單沒有的人會自動加進針數與群組&#10;名字旁以 (HIS) 備註">
                     <button type="button" class="phis-clear" onclick="clearPhis('k')">✕</button>
-                    <div class="phis-card-title">PHIS 6K 新冠 <small>(選傳)</small></div>
+                    <div class="phis-card-title">HIS 6K 新冠 <small>(選傳)</small></div>
                     <div class="phis-file-btn"><input type="file" accept=".csv" id="phisFile_k" onchange="handlePhisSelected('k')"><span id="phisHint_k">夾帶 6K 掛號檔</span></div>
                     <div class="phis-file-name" id="phisName_k"></div>
                 </div>
-                <div class="phis-card z" id="phisCard_z" data-tip="PHIS 流感掛號檔（優待別 6Z）&#10;選傳：夾帶後自動與 NIIS 名單交叉對針&#10;列出兩邊不一致的名單">
+                <div class="phis-card z" id="phisCard_z" data-tip="HIS 流感掛號檔（優待別 6Z）&#10;選傳：NIIS 名單沒有的人會自動加進針數與群組&#10;名字旁以 (HIS) 備註">
                     <button type="button" class="phis-clear" onclick="clearPhis('z')">✕</button>
-                    <div class="phis-card-title">PHIS 6Z 流感 <small>(選傳)</small></div>
+                    <div class="phis-card-title">HIS 6Z 流感 <small>(選傳)</small></div>
                     <div class="phis-file-btn"><input type="file" accept=".csv" id="phisFile_z" onchange="handlePhisSelected('z')"><span id="phisHint_z">夾帶 6Z 掛號檔</span></div>
                     <div class="phis-file-name" id="phisName_z"></div>
                 </div>
-                <div class="phis-card v" id="phisCard_v" data-tip="PHIS 肺鏈掛號檔（優待別 6V）&#10;選傳：夾帶後自動與 NIIS 名單交叉對針&#10;列出兩邊不一致的名單">
+                <div class="phis-card v" id="phisCard_v" data-tip="HIS 肺鏈掛號檔（優待別 6V）&#10;選傳：NIIS 名單沒有的人會自動加進針數與群組&#10;名字旁以 (HIS) 備註">
                     <button type="button" class="phis-clear" onclick="clearPhis('v')">✕</button>
-                    <div class="phis-card-title">PHIS 6V 肺鏈 <small>(選傳)</small></div>
+                    <div class="phis-card-title">HIS 6V 肺鏈 <small>(選傳)</small></div>
                     <div class="phis-file-btn"><input type="file" accept=".csv" id="phisFile_v" onchange="handlePhisSelected('v')"><span id="phisHint_v">夾帶 6V 掛號檔</span></div>
                     <div class="phis-file-name" id="phisName_v"></div>
                 </div>
@@ -1666,7 +1666,7 @@ h1                { animation-delay: 0.05s; }
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v3.5</div>
+    <div class="version-tag">v3.6</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -1757,7 +1757,7 @@ h1                { animation-delay: 0.05s; }
             document.getElementById('mainFileName').textContent = '';
         }
 
-        /* ===== PHIS 對針檔（選傳，v3.5） ===== */
+        /* ===== HIS 掛號檔（選傳，v3.6：加計模式） ===== */
         // 簡易 CSV 單列解析（處理引號欄位，避免地址含逗號時欄位偏移）
         function splitCsvLine(line) {
             var out = [], cur = '', inQ = false;
@@ -1794,7 +1794,7 @@ h1                { animation-delay: 0.05s; }
                 return;
             }
             readFileAsText(file, 'big5').then(function(content) {
-                // 以「優待別」欄驗證檔案類型（新版 PHIS 匯出格式；無此欄則交由後端判斷）
+                // 以「優待別」欄驗證檔案類型（新版 HIS 匯出格式；無此欄則交由後端判斷）
                 var rows = content.split(/\r?\n/);
                 var header = splitCsvLine(rows[0] || '');
                 var typeIdx = -1;
@@ -1805,7 +1805,7 @@ h1                { animation-delay: 0.05s; }
                     var tv = (splitCsvLine(rows[1] || '')[typeIdx] || '').trim();
                     if (tv && tv.toUpperCase() !== PHIS_META[slot].expect) {
                         showFx('error', '非 ' + PHIS_META[slot].expect + ' 檔案',
-                            '優待別欄為「' + tv + '」，請確認夾帶正確的 PHIS 檔', 3200);
+                            '優待別欄為「' + tv + '」，請確認夾帶正確的 HIS 檔', 3200);
                         return;
                     }
                 }
@@ -1813,10 +1813,10 @@ h1                { animation-delay: 0.05s; }
                 document.getElementById('phisCard_' + slot).classList.add('attached');
                 document.getElementById('phisName_' + slot).textContent = file.name;
                 if (currentFile) {
-                    startStatistics(currentFile);  // 立即重新統計＋對針
+                    startStatistics(currentFile);  // 立即重新統計＋加計
                 } else {
                     showFx('emoji', '已夾帶 ' + PHIS_META[slot].label,
-                        '夾帶 NIIS 名單後將自動交叉對針', 2200, '📎');
+                        '夾帶 NIIS 名單後將自動加計進統計', 2200, '📎');
                 }
             }).catch(function(err) {
                 showFx('error', '讀取檔案時發生錯誤', String(err), 3200);
@@ -2077,11 +2077,11 @@ h1                { animation-delay: 0.05s; }
                     .sendEmailWithAttachments(document.getElementById('result').innerHTML, note, fileContents, validEmails);
             };
 
-            // 附件：NIIS 名單 + 已夾帶的 PHIS 對針檔
+            // 附件：NIIS 名單 + 已夾帶的 HIS 掛號檔
             var filesToAttach = [];
             if (currentFile) filesToAttach.push({ file: currentFile, name: '流感系統名單_' + currentFile.name });
             ['k', 'z', 'v'].forEach(function(slot) {
-                if (phisFiles[slot]) filesToAttach.push({ file: phisFiles[slot], name: 'PHIS_' + PHIS_META[slot].expect + '_' + phisFiles[slot].name });
+                if (phisFiles[slot]) filesToAttach.push({ file: phisFiles[slot], name: 'HIS_' + PHIS_META[slot].expect + '_' + phisFiles[slot].name });
             });
             Promise.all(filesToAttach.map(function(f) {
                 return new Promise(function(resolve) {
