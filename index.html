@@ -1692,7 +1692,7 @@ h1                { animation-delay: 0.05s; }
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v3.7</div>
+    <div class="version-tag">v3.8</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -1913,7 +1913,8 @@ h1                { animation-delay: 0.05s; }
             var html = '';
             html += '<div class="settings-help">' +
                 '對象：HIS 檔中 <b>NIIS 名單沒有</b> 的人（已在 NIIS 者自動略過）。' +
-                '身分別：新冠/流感用下方代號自動填（HIS 檔內有「NIIS身分別」值的人優先用檔內值）；<b>肺鏈免填</b>。<br>' +
+                '身分別：<b>新冠依年齡自動判斷</b>（只看出生年：-4歲C15／5-11 C14／12-17 C17／18-49 C12／50-64 C10／65-74 C11／75+ C08A）；' +
+                '流感用下方代號；<b>肺鏈免填</b>。<br>' +
                 '針劑清單可直接<b>匯入結存量檔</b>（NIIS 匯出的 .xls，可一次多選），自動歸類記憶，下次直接下拉選。</div>';
 
             // 結存量匯入
@@ -1927,7 +1928,7 @@ h1                { animation-delay: 0.05s; }
             html += '<div class="settings-row"><div class="settings-row-head" style="align-items:flex-end;">';
             html += '<div class="s-field" data-tip="NIIS 接種機構代碼&#10;佳里區衛生所＝2341050013"><span class="s-cap">接種機構代碼</span><input class="s-input" id="expOrg" style="width:130px;" value="' + escAttr(cfg.org || '') + '"></div>';
             html += '<div class="s-field" data-tip="民國 7 碼&#10;預設＝今天或過去最近的禮拜四"><span class="s-cap">接種日期</span><input class="s-input" id="expDate" style="width:110px;" value="' + escAttr(cfg._uiDate || defaultRocDate()) + '"></div>';
-            html += '<div class="s-field" data-tip="新冠身分別代號（如 C11）&#10;會自動填入匯入檔身分別欄"><span class="s-cap">新冠身分別代號</span><input class="s-input" id="expIdCorona" style="width:110px;" value="' + escAttr((cfg.idCodes || {}).corona || '') + '" placeholder="C11"></div>';
+            html += '<div class="s-field" data-tip="新冠身分別＝系統依年齡自動判斷&#10;（接種年－出生年，只看年）&#10;此欄僅當 HIS 檔缺出生日期時備援使用"><span class="s-cap">新冠備援代號</span><input class="s-input" id="expIdCorona" style="width:110px;" value="' + escAttr((cfg.idCodes || {}).corona || '') + '" placeholder="自動依年齡"></div>';
             html += '<div class="s-field" data-tip="流感身分別代號（如 F03A）&#10;會自動填入匯入檔身分別欄"><span class="s-cap">流感身分別代號</span><input class="s-input" id="expIdFlu" style="width:110px;" value="' + escAttr((cfg.idCodes || {}).flu || '') + '" placeholder="F03A"></div>';
             html += '</div></div>';
 
