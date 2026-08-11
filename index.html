@@ -2087,7 +2087,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v5.4</div>
+    <div class="version-tag">v5.5</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2564,8 +2564,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<button type="button" class="s-btn s-del" data-tip="從記憶清單移除目前選中的針劑" onclick="removeBatch(\'' + slot + '\')">刪除</button>';
                 html += '</div>';
                 html += '<div class="settings-row-head" style="align-items:flex-end;margin-top:6px;margin-bottom:0;">';
-                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的「同類疫苗」代號自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">手動新增：疫苗種類代號</span><input class="s-input" id="expNewType_' + slot + '" list="dlTypes_' + slot + '" placeholder="例：CoV_Moderna_LP"></div>';
-                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的「同類疫苗」批號自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">批號</span><input class="s-input" id="expNewLot_' + slot + '" list="dlLots_' + slot + '" placeholder="例：3053857_1150826-CDC"></div>';
+                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的「同類疫苗」代號自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">手動新增：疫苗種類代號</span><input class="s-input" id="expNewType_' + slot + '" list="dlTypes_' + slot + '"></div>';
+                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的「同類疫苗」批號自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">批號</span><input class="s-input" id="expNewLot_' + slot + '" list="dlLots_' + slot + '"></div>';
                 html += '<button type="button" class="s-btn s-copy" onclick="addManualBatch(\'' + slot + '\')">加入</button>';
                 html += '</div>';
 
