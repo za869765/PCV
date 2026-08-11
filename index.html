@@ -243,10 +243,11 @@ h1::after {
 .phis-card {
     flex: 1;
     min-width: 220px;
+    min-height: 150px;
     background: var(--card-bg);
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-soft);
-    padding: 14px 16px;
+    padding: 22px 18px;
     border-left: 6px solid #ccc;
     position: relative;
     transition: all var(--transition-speed) ease;
@@ -277,7 +278,7 @@ h1::after {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 40px;
+    height: 58px;
     border: 2px dashed #cbd5e1;
     border-radius: 8px;
     background: #f8f9fa;
@@ -2086,7 +2087,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v5.3</div>
+    <div class="version-tag">v5.4</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2485,14 +2486,18 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             };
             var html = '';
 
-            // 記憶值自動填（datalist）：疫苗種類代號／批號（匯入或手動新增過的都列入）
-            var dlT = {}, dlL = {};
-            (cfg.batches || []).forEach(function(b) {
-                if (b.type) dlT[b.type] = 1;
-                if (b.lot) dlL[b.lot] = 1;
+            // 記憶值自動填（datalist）：依疫苗類別隔離——新冠>新冠、流感>流感、肺鏈>肺鏈（未歸類不列）
+            ['k', 'z', 'v'].forEach(function(sl) {
+                var famX = SLOT_FAMILY[sl];
+                var dt = {}, dl = {};
+                (cfg.batches || []).forEach(function(b) {
+                    if (b.family !== famX) return;
+                    if (b.type) dt[b.type] = 1;
+                    if (b.lot) dl[b.lot] = 1;
+                });
+                html += '<datalist id="dlTypes_' + sl + '">' + Object.keys(dt).map(function(t) { return '<option value="' + escAttr(t) + '">'; }).join('') + '</datalist>';
+                html += '<datalist id="dlLots_' + sl + '">' + Object.keys(dl).map(function(l) { return '<option value="' + escAttr(l) + '">'; }).join('') + '</datalist>';
             });
-            html += '<datalist id="dlTypes">' + Object.keys(dlT).map(function(t) { return '<option value="' + escAttr(t) + '">'; }).join('') + '</datalist>';
-            html += '<datalist id="dlLots">' + Object.keys(dlL).map(function(l) { return '<option value="' + escAttr(l) + '">'; }).join('') + '</datalist>';
 
             // ── 容器 1：檔案上傳與共用設定（手風琴：點標題展開；判讀設定已回歸各疫苗容器） ──
             html += '<div class="exp-sec common' + (expOpenSec === 'common' ? ' open' : '') + '">';
@@ -2559,8 +2564,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<button type="button" class="s-btn s-del" data-tip="從記憶清單移除目前選中的針劑" onclick="removeBatch(\'' + slot + '\')">刪除</button>';
                 html += '</div>';
                 html += '<div class="settings-row-head" style="align-items:flex-end;margin-top:6px;margin-bottom:0;">';
-                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的代號會自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">手動新增：疫苗種類代號</span><input class="s-input" id="expNewType_' + slot + '" list="dlTypes" placeholder="例：CoV_Moderna_LP"></div>';
-                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的批號會自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">批號</span><input class="s-input" id="expNewLot_' + slot + '" list="dlLots" placeholder="例：3053857_1150826-CDC"></div>';
+                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的「同類疫苗」代號自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">手動新增：疫苗種類代號</span><input class="s-input" id="expNewType_' + slot + '" list="dlTypes_' + slot + '" placeholder="例：CoV_Moderna_LP"></div>';
+                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的「同類疫苗」批號自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">批號</span><input class="s-input" id="expNewLot_' + slot + '" list="dlLots_' + slot + '" placeholder="例：3053857_1150826-CDC"></div>';
                 html += '<button type="button" class="s-btn s-copy" onclick="addManualBatch(\'' + slot + '\')">加入</button>';
                 html += '</div>';
 
