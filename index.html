@@ -1333,10 +1333,48 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     opacity: 0.6;
 }
 
-/* 手風琴：預設縮小只留標題＋摘要，點擊展開成整列寬 */
+/* 手風琴：預設縮小只留標題＋摘要，點擊展開 */
+/* 可點擊表頭＝藍色漸層底＋hover 加深＋👆手勢引導；與不可點區域明顯區別 */
 .exp-sec-title {
     cursor: pointer;
     user-select: none;
+    background: linear-gradient(135deg, #e8f1fd, #d9e9fb);
+    border: 1px solid #b9d4f5;
+    border-radius: 8px;
+    padding: 8px 12px;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.exp-sec-title:hover {
+    background: linear-gradient(135deg, #d9e9fb, #c8dff9);
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.18);
+}
+
+.exp-sec-title::after {
+    content: "👆";
+    font-size: 15px;
+    margin-left: 6px;
+    animation: tapBob 1.2s ease-in-out infinite;
+}
+
+@keyframes tapBob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-4px); }
+}
+
+/* 不可點（未夾帶佔位）：灰底、無手勢、預設游標 */
+.exp-sec.empty .exp-sec-title {
+    background: #f1f3f6;
+    border-color: #e2e8f0;
+    cursor: default;
+}
+
+.exp-sec.empty .exp-sec-title:hover {
+    box-shadow: none;
+}
+
+.exp-sec.empty .exp-sec-title::after {
+    content: none;
 }
 
 .exp-caret {
@@ -2048,7 +2086,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v5.1</div>
+    <div class="version-tag">v5.2</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2456,10 +2494,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             html += '<datalist id="dlTypes">' + Object.keys(dlT).map(function(t) { return '<option value="' + escAttr(t) + '">'; }).join('') + '</datalist>';
             html += '<datalist id="dlLots">' + Object.keys(dlL).map(function(l) { return '<option value="' + escAttr(l) + '">'; }).join('') + '</datalist>';
 
-            // ── 容器 1：檔案上傳與共用設定（手風琴：點標題展開） ──
+            // ── 容器 1：檔案上傳與共用設定（手風琴：點標題展開；判讀設定已回歸各疫苗容器） ──
             html += '<div class="exp-sec common' + (expOpenSec === 'common' ? ' open' : '') + '">';
-            html += '<div class="exp-sec-title" onclick="expToggleSec(\'common\', event)"><span class="exp-caret">▸</span>📁 檔案與共用設定';
-            html += '<button type="button" class="s-btn s-copy" style="margin-left:auto;" data-tip="檢視／修改自動判讀條件&#10;新冠年齡對照表、流感公費門檻與預設代號&#10;（存雲端，全所共用，非每次都需進入）" onclick="openRuleSettings()">⚙ 自動判讀設定</button></div>';
+            html += '<div class="exp-sec-title" onclick="expToggleSec(\'common\', event)"><span class="exp-caret">▸</span>📁 檔案與共用設定</div>';
             html += '<div class="exp-sum" id="expSum_common">機構 ' + escAttr(cfg.org || '2341050013') + '｜接種日 民國 ' + escAttr(isoToRoc(cfg._uiDateIso || defaultThursdayISO()) || '—') + '｜結存量匯入・日期設定　▸ 點擊展開</div>';
             html += '<div class="exp-drop" data-tip="NIIS 匯出的結存量檔（.xls）&#10;可一次多選，夾帶後自動解析&#10;針劑自動歸類並存雲端記憶"><input type="file" id="expStockFiles" accept=".xls,.xlsx,.csv" multiple onchange="importStockFiles()"><span>📎 夾帶結存量檔（可多選，夾帶後自動解析）</span></div>';
             html += '<div id="expStockMsg" style="font-size:12.5px;color:#27ae60;margin:6px 0 10px;"></div>';
@@ -2473,14 +2510,25 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             for (var si = 0; si < slots.length; si++) {
                 var slot = slots[si];
                 var sec = SLOT_SEC[slot];
+                // 各疫苗自己的判讀設定齒輪（新冠=年齡對照表；流感=門檻/代號/F代碼表；肺鏈免填不設）
+                var gearTip = slot === 'k'
+                    ? '新冠判讀設定&#10;年齡對照代碼表（存雲端，全所共用）'
+                    : '流感判讀設定&#10;公費門檻、所內/所外預設代號、對象別代碼表&#10;（存雲端，全所共用）';
+                var gearOf = function(withMargin) {
+                    if (slot === 'v') return '';
+                    return '<button type="button" class="s-btn s-copy"' + (withMargin ? ' style="margin-left:auto;"' : '') +
+                        ' data-tip="' + gearTip + '" onclick="openRuleSettings(\'' + (slot === 'k' ? 'covid' : 'flu') + '\')">⚙ 判讀設定</button>';
+                };
                 if (!phisFiles[slot]) {
-                    html += '<div class="exp-sec ' + slot + ' empty"><div class="exp-sec-title" style="cursor:default;">' + sec.icon + ' ' + sec.title + '</div>';
+                    html += '<div class="exp-sec ' + slot + ' empty"><div class="exp-sec-title" style="cursor:default;">' + sec.icon + ' ' + sec.title + gearOf(true) + '</div>';
                     html += '<div class="exp-sum">未夾帶 ' + PHIS_META[slot].expect + ' 掛號檔（回主頁夾帶後即出現名單）</div></div>';
                     continue;
                 }
                 var fam = SLOT_FAMILY[slot];
                 html += '<div class="exp-sec ' + slot + (expOpenSec === slot ? ' open' : '') + '">';
                 html += '<div class="exp-sec-title" onclick="expToggleSec(\'' + slot + '\', event)"><span class="exp-caret">▸</span>' + sec.icon + ' ' + sec.title + '｜<span style="font-weight:400;font-size:0.9rem;">' + escAttr(phisFiles[slot].name) + '</span>';
+                if (slot === 'k') html += gearOf(true);
+                if (slot === 'z') html += gearOf(false);
                 if (slot === 'z') {
                     var fluIn = escAttr((cfg.idCodes || {}).fluIn || 'F03A');
                     var fluOut = escAttr((cfg.idCodes || {}).fluOut || 'F03B');
@@ -3080,12 +3128,17 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 .saveNiisExportConfig(exportConfig);
         }
 
-        /* ===== 齒輪：身分別自動判讀設定 ===== */
-        function openRuleSettings() {
+        /* ===== 齒輪：身分別自動判讀設定（v5.2 分域：covid=新冠容器、flu=流感容器） ===== */
+        function openRuleSettings(scope) {
             collectExportInputs();
+            if (scope) window._ruleScope = scope;
+            var sc = window._ruleScope || 'flu';
+            var hEl = document.querySelector('#ruleModal .custom-modal-header h2');
+            if (hEl) hEl.textContent = sc === 'covid' ? '🦠 新冠：身分別自動判讀設定' : '💉 流感：身分別自動判讀設定';
             var cfg = exportConfig;
             var html = '<div class="settings-help">依接種對象<b>年齡（只看出生年）</b>自動填身分別；' +
                 '改完按「儲存設定」存雲端（全所共用），平常不需進來。</div>';
+            if (sc === 'covid') {
             html += '<div class="settings-row"><div style="font-weight:600;margin-bottom:8px;">🦠 新冠：年齡對照表</div>';
             html += '<div style="display:grid;grid-template-columns:1fr 110px;gap:6px 10px;align-items:center;">';
             for (var i = 0; i < cfg.covidTable.length; i++) {
@@ -3093,6 +3146,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<input class="s-input" id="ruleCov_' + i + '" style="text-align:center;" value="' + escAttr(cfg.covidTable[i].code) + '">';
             }
             html += '</div></div>';
+            }
+            if (sc === 'flu') {
             html += '<div class="settings-row"><div style="font-weight:600;margin-bottom:8px;">💉 流感：公費門檻與預設代號</div>';
             html += '<div class="settings-row-head" style="align-items:flex-end;">';
             html += '<div class="s-field" data-tip="所內場次的預設身分別代號"><span class="s-cap">所內預設</span><input class="s-input" id="ruleFluIn" style="width:100px;text-align:center;" value="' + escAttr(cfg.idCodes.fluIn || 'F03A') + '"></div>';
@@ -3116,6 +3171,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             html += '</div>';
             html += '<button type="button" class="s-btn s-copy" style="margin-top:6px;" onclick="ruleFluAddRow()">＋ 新增代碼</button>';
             html += '</div>';
+            }
             document.getElementById('ruleBody').innerHTML = html;
             document.getElementById('ruleModal').classList.add('show');
         }
@@ -3179,7 +3235,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function saveRuleSettings() {
             var cfg = exportConfig;
             collectRuleInputs();
-            cfg.fluCodeTable = ruleFluCollect().filter(function(x) { return x.code; });
+            // 分域儲存：只有流感面板有代碼表時才覆寫（避免新冠面板儲存誤清流感表）
+            if (document.getElementById('ruleFluTable')) {
+                cfg.fluCodeTable = ruleFluCollect().filter(function(x) { return x.code; });
+            }
             showFx('loading', '儲存設定中', '');
             google.script.run
                 .withSuccessHandler(function(res) {
