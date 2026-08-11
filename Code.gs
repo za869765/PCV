@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v4.9)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v5.1)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -73,6 +73,12 @@
  *  展開格吃滿剩餘全螢幕（#exportBody.focus 直向排列）；全收合時維持 2×2
  * v4.9 變更：聚焦時未展開標題列壓暗底色（滑過提亮）＋聚焦格紫色描邊，
  *  明顯區分目前工作區
+ * v5.1 變更（疫苗代碼字元防呆；NIIS 115/10/1 新增 FluAdj/FluHD 情資）：
+ *  - 官方疫苗種類正典表 CANON_TYPES：匯出 NIIS 檔時疫苗種類自動校正成官方大小寫
+ *    （如 fluadj→FluAdj、FLUHD→FluHD）；不在表內者保持原樣
+ *  - cleanCodeStr：辨識（NIIS K欄）、結存量匯入、手動新增、匯出組檔四處
+ *    一律清除 BOM/零寬空白/nbsp/全形空白＋trim，避免看不見的字元造成辨識或匯入失敗
+ *  - FluAdj/FluHD 現行辨識設定即涵蓋（FLU 子字串），統計歸流感不需改設定
  */
 
 function doGet() {
@@ -283,7 +289,7 @@ function analyzeNIIS(jnContent, config) {
     if (!row) continue;
     var id = (row[0] || '').toString().trim().toUpperCase();  // 統一大寫，與 HIS 檔比對一致
     var name = (row[1] || '').toString().trim();
-    var raw = (row[10] || '').toString().trim();
+    var raw = cleanCodeStr(row[10]);   // 疫苗種類：清隱形字元再辨識（v5.1 字元防呆）
     if (!id && !name && !raw) continue;  // 空白列
 
     if (id && name && !idNameMap[id]) idNameMap[id] = name;
@@ -544,8 +550,8 @@ function cleanNiisExportConfig(cfg) {
   var seen = {};
   for (var i = 0; i < list.length && clean.batches.length < 100; i++) {
     var b = list[i] || {};
-    var t = String(b.type || '').trim().slice(0, 40);
-    var l = String(b.lot || '').trim().slice(0, 40);
+    var t = canonType(b.type).slice(0, 40);
+    var l = cleanCodeStr(b.lot).slice(0, 40);
     if (!t || !l || seen[t + '|' + l]) continue;
     seen[t + '|' + l] = true;
     clean.batches.push({
@@ -591,8 +597,8 @@ function importNiisBatches(entries, currentCfg) {
     entries = entries || [];
     for (var e = 0; e < entries.length && e < 300; e++) {
       var en = entries[e] || {};
-      var t = String(en.type || '').trim().slice(0, 40);
-      var l = String(en.lot || '').trim().slice(0, 40);
+      var t = canonType(en.type).slice(0, 40);
+      var l = cleanCodeStr(en.lot).slice(0, 40);
       if (!t || !l) continue;
       var exp = String(en.exp || '').trim().slice(0, 10);
       var qty = String(en.qty == null ? '' : en.qty).trim().slice(0, 10);
@@ -621,6 +627,26 @@ function importNiisBatches(entries, currentCfg) {
 function csvField(v) {
   v = (v == null ? '' : String(v));
   return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+
+// ===== 疫苗代碼字元防呆（v5.1） =====
+// 清除看不見的字元：BOM/零寬空白/不斷行空白/全形空白＋前後空白
+function cleanCodeStr(s) {
+  return String(s == null ? '' : s).replace(/[\uFEFF\u200B\u200C\u200D\u00A0\u3000]/g, '').trim();
+}
+
+// NIIS 官方疫苗種類代號正典表（BA101_3F；115/10/1 起新增 FluAdj/FluHD）
+var CANON_TYPES = ['CoV_Moderna_LP', 'CoV_Moderna_XFG', 'CoV_Novavax_XFG',
+                   'Flu', 'FluAdj', 'FluHD', '20PCV', '21PCV'];
+
+// 疫苗種類正典化：大小寫不同自動校正成官方寫法；不在表內者清完字元照原樣
+function canonType(s) {
+  var c = cleanCodeStr(s);
+  var lc = c.toLowerCase();
+  for (var i = 0; i < CANON_TYPES.length; i++) {
+    if (CANON_TYPES[i].toLowerCase() === lc) return CANON_TYPES[i];
+  }
+  return c;
 }
 
 // 前端產檔面板用：NIIS 名單三類別身分證集合（與加計/略過邏輯同一套辨識設定）
@@ -754,13 +780,15 @@ function buildNiisExport(phisFiles, jnContent, picks) {
       for (var i = 0; i < ids.length; i++) {
         var pid = ids[i];
         if (niisFam[def.family][pid]) { skipped++; continue; }
-        // 針劑：個別拉選優先，否則用該檔主選
+        // 針劑：個別拉選優先，否則用該檔主選；匯出前字元防呆＋官方大小寫正典化
         var pType = pick.type || '';
         var pLot = pick.lot || '';
         if (slotPB[pid]) {
           var pbParts = String(slotPB[pid]).split('|');
           if (pbParts[0]) { pType = pbParts[0]; pLot = pbParts.slice(1).join('|'); }
         }
+        pType = canonType(pType);
+        pLot = cleanCodeStr(pLot);
         if (!pType || !pLot) noBatch.push(parsed.idNameMap[pid] || pid);
         var identity = '';
         if (def.family === 'corona') {
