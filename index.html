@@ -2086,7 +2086,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v5.2</div>
+    <div class="version-tag">v5.3</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2528,13 +2528,14 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<div class="exp-sec ' + slot + (expOpenSec === slot ? ' open' : '') + '">';
                 html += '<div class="exp-sec-title" onclick="expToggleSec(\'' + slot + '\', event)"><span class="exp-caret">▸</span>' + sec.icon + ' ' + sec.title + '｜<span style="font-weight:400;font-size:0.9rem;">' + escAttr(phisFiles[slot].name) + '</span>';
                 if (slot === 'k') html += gearOf(true);
-                if (slot === 'z') html += gearOf(false);
                 if (slot === 'z') {
                     var fluIn = escAttr((cfg.idCodes || {}).fluIn || 'F03A');
                     var fluOut = escAttr((cfg.idCodes || {}).fluOut || 'F03B');
-                    html += '<span style="margin-left:auto;font-size:0.92rem;font-weight:400;color:#475569;">目前設定是：<b style="color:#1565c0;">' +
+                    // 目前設定＋切換靠左（檔名旁）；⚙判讀設定與新冠一樣靠最右
+                    html += '<span style="margin-left:12px;font-size:0.92rem;font-weight:400;color:#475569;">目前設定是：<b style="color:#1565c0;">' +
                         (expOutpost ? '🚩 所外 ' + fluOut : '🏠 所內 ' + fluIn) + '</b></span>';
                     html += '<button type="button" class="exp-toggle' + (expOutpost ? ' on' : '') + '" data-tip="切換所內／所外（外設站）&#10;未拉選者預設代號：所內 ' + fluIn + ' ↔ 所外 ' + fluOut + '&#10;已個別拉選者不受影響" onclick="toggleOutpost()">切換</button>';
+                    html += gearOf(true);
                 }
                 html += '</div>';
                 html += '<div class="exp-sum" id="expSum_' + slot + '">' + (slotPersonList[slot].length ? '名單 ' + slotPersonList[slot].length + ' 人｜' : '') + '針劑與名單設定　▸ 點擊展開</div>';
