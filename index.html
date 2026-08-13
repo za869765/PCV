@@ -2157,7 +2157,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v5.7</div>
+    <div class="version-tag">v5.8</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2571,7 +2571,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             if (!d) return '';
             var h = '<div class="imp-detail"><div>✔ 加入 ' + d.added + ' 筆、更新 ' + d.updated + ' 筆' +
                 (d.skippedOther ? '、略過非目標疫苗 ' + d.skippedOther + ' 筆' : '') +
-                (d.sheetOk ? '——已存入試算表「針劑記憶」，可直接開表檢視/修改' : '——已存雲端') + '</div>';
+                (d.sheetOk ? '——已自動存入試算表「針劑記憶」（<b>免按儲存設定</b>），可直接開表檢視/修改'
+                           : '——已自動存雲端（<b>免按儲存設定</b>）') + '</div>';
             function items(list) {
                 return list.map(function(x) { return escAttr(x.type) + '｜' + escAttr(x.lot); }).join('、');
             }
@@ -2580,7 +2581,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             if (d.updatedList && d.updatedList.length) rows += '<div><b>更新：</b>' + items(d.updatedList) + '</div>';
             if (d.skippedList && d.skippedList.length) rows += '<div><b>略過（非新冠/流感/肺鏈，不干預）：</b>' +
                 d.skippedList.map(function(x) { return escAttr(x.type) + (x.count > 1 ? '×' + x.count : ''); }).join('、') + '</div>';
-            if (rows) h += '<details><summary>本次匯入明細</summary>' + rows + '</details>';
+            if (rows) h += '<details open><summary>本次匯入明細</summary>' + rows + '</details>';   // 匯入後預設展開完整明細
             return h + '</div>';
         }
 
