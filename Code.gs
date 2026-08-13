@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.2)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.3)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -114,6 +114,16 @@
  *  「已在 NIIS 自動略過」灰階與 skipped 概念移除；流感身分別優先序＝
  *  個別拉選＞NIIS 檔內身分別＞門檻預設；analyzeNIIS 加抓性別/地址/電話/劑次；
  *  新增 getNiisFamilyPersons 供前端名單合併
+ * v6.3 變更（UI 大改版，使用者九點定案）：
+ *  1) 身分別判讀設定整合進主頁 ⚙ 疫苗辨識設定（不再散在匯出面板各容器）
+ *  2) 針劑匯入移到主頁「匯入針劑」按鈕（面板內夾帶區移除）
+ *  3) 匯出面板瘦身＝只做「套針劑＋身分別→產檔」
+ *  4) 移除「儲存設定」鈕（匯入即存、產檔自動存）
+ *  5) 版面恆定多宮格（移除手風琴/聚焦變形）
+ *  6) 當次沒有的疫苗類別不顯示容器（n1/n2/n3 自動排欄）
+ *  7) 主頁按鈕旁顯示目前針劑（依類別分組、效期舊→新）；過期由後端載入時自動清除不再詢問
+ *  8) 匯入以庫存檔為準：檔裡沒有的視同已用完自動刪除
+ *  9) 手動新增針劑移除（來源只剩庫存檔匯入）
  */
 
 function doGet() {
@@ -696,6 +706,28 @@ function getNiisExportConfig() {
       cfg.batches = sheetBatches;   // 之後表就是唯一真相（清空＝真的清空）
     }
   }
+  // v6.3：效期早於今天的針劑自動清除（不再詢問；同步試算表）
+  var now = new Date();
+  var todayRoc = (now.getFullYear() - 1911) * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+  var keep = [], purged = 0, purgedKeys = {};
+  for (var pb = 0; pb < cfg.batches.length; pb++) {
+    var pe = parseInt(String(cfg.batches[pb].exp || '').replace(/\D/g, ''), 10);
+    if (pe && String(pe).length >= 6 && pe < todayRoc) {
+      purged++;
+      purgedKeys[cfg.batches[pb].type + '|' + cfg.batches[pb].lot] = true;
+      continue;
+    }
+    keep.push(cfg.batches[pb]);
+  }
+  if (purged > 0) {
+    cfg.batches = keep;
+    cfg.lastPick = cfg.lastPick || {};   // 被清批次的上次拉選一併清（否則同 key 再匯入會復活舊選擇）
+    for (var lpk in cfg.lastPick) {
+      if (purgedKeys[cfg.lastPick[lpk]]) delete cfg.lastPick[lpk];
+    }
+    var savedP = saveNiisExportConfig(cfg);
+    if (savedP.success) cfg = savedP.config;
+  }
   return cfg;
 }
 
@@ -783,8 +815,10 @@ function saveNiisExportConfig(cfg) {
 
 /**
  * 匯入結存量／庫存量檔解析出的針劑清單（前端解析後傳入 [{type, lot, exp}]）
- * 併入現有設定（同 種類+批號 視為同筆、更新效期），依疫苗辨識設定自動歸類別。
- * v5.7：不記存量（庫存以官方 NIIS 為準）；回傳加入/更新/略過明細清單。
+ * v6.3：改「以庫存檔為準」的同步語意（使用者定案，手動新增已移除）——
+ *   檔有＋記憶有 → 不動（kept）；檔有＋記憶沒有 → 新增；
+ *   記憶有＋檔沒有 → 視同已用完，自動刪除（removedList 回報）。
+ * 辨識不出三類別（BCG/MMR…）者略過；依疫苗辨識設定自動歸類別。
  */
 function importNiisBatches(entries, currentCfg) {
   try {
@@ -793,62 +827,83 @@ function importNiisBatches(entries, currentCfg) {
     var keyFam = {};
     for (var g = 0; g < config.length; g++) keyFam[config[g].key] = config[g].family;
 
-    var byKey = {};
-    for (var i = 0; i < cfg.batches.length; i++) byKey[cfg.batches[i].type + '|' + cfg.batches[i].lot] = cfg.batches[i];
-
-    var added = 0, updated = 0, unchanged = 0, skippedOther = 0;
-    var addedList = [], updatedList = [], unchangedList = [], skippedMap = {};
+    // 檔中目標批次集合（去重；非目標略過回報）
+    var fileKeys = {};
+    var fileOrder = [];
+    var skippedOther = 0, skippedMap = {};
     entries = entries || [];
-    // v5.6：庫存量查詢檔含全部疫苗（BCG/MMR…）——辨識不出三類別者略過不存，
-    // 否則 family 空值會出現在全部下拉選單（選單過濾放行空 family）；
-    // 儲存上限只計實際存入的目標批次，不被略過者消耗（與 cleanNiisExportConfig 的 100 一致）
     for (var e = 0; e < entries.length; e++) {
       var en = entries[e] || {};
       var t = canonType(en.type).slice(0, 40);
       var l = cleanCodeStr(en.lot).slice(0, 40);
       if (!t || !l) continue;
-      var exp = String(en.exp || '').trim().slice(0, 10);
       var k = t + '|' + l;
+      if (fileKeys[k]) continue;
       var gk = recognizeVaccineCategory(t, config);
       var fam = gk ? (keyFam[gk] || '') : '';
-      if (byKey[k]) {
-        var ex = byKey[k];
-        if (!ex.family && !fam) {
-          // 舊版曾存入且仍辨識不出 → 一併清掉（污染來源同一種檔，重匯即清）
-          var pos = cfg.batches.indexOf(ex);
-          if (pos >= 0) cfg.batches.splice(pos, 1);
-          delete byKey[k];
-          skippedOther++;
-          skippedMap[t] = (skippedMap[t] || 0) + 1;
-          continue;
-        }
-        // v5.9：真的有變才算「更新」，否則回報「已存在無變動」（重複匯入不再誤導）
-        var changed = false;
-        if (!ex.family) { ex.family = fam; changed = true; }   // 舊污染補上類別
-        if (exp && exp !== ex.exp) { ex.exp = exp; changed = true; }
-        if (changed) { updated++; updatedList.push({ type: t, lot: l }); }
-        else { unchanged++; unchangedList.push({ type: t, lot: l }); }
+      if (!fam) {
+        skippedOther++;
+        skippedMap[t] = (skippedMap[t] || 0) + 1;
+        continue;
+      }
+      fileKeys[k] = { type: t, lot: l, exp: String(en.exp || '').trim().slice(0, 10), family: fam, seen: false };
+      fileOrder.push(k);
+    }
+
+    // 防呆：檔中一筆目標疫苗都沒有 → 不動任何記憶（否則夾錯檔會把整份針劑清空）
+    // noChange:true ＝「擋下未變更」，與真正的儲存失敗區分（前端文案不同）
+    if (fileOrder.length === 0) {
+      return { success: false, noChange: true,
+        error: '這個檔案裡沒有新冠／流感／肺鏈的針劑資料' +
+               (skippedOther > 0 ? '（只有 ' + skippedOther + ' 筆其他疫苗）' : '') +
+               '，為避免誤刪，記憶未變更。請確認夾帶的是 NIIS 庫存量／結存量檔。' };
+    }
+    // 超過儲存上限直接擋下（否則「以檔為準」會變成不完整同步）
+    if (fileOrder.length > 100) {
+      return { success: false, noChange: true,
+        error: '檔內目標針劑 ' + fileOrder.length + ' 筆，超過系統上限 100 筆，記憶未變更。請先於 NIIS 篩選後再匯出。' };
+    }
+
+    // 同步：記憶有＋檔有→保留不動；記憶有＋檔沒有→視同用完刪除（舊 family 空污染一併清）
+    var kept = 0, removed = 0, removedList = [];
+    var removedKeys = {};
+    var newBatches = [];
+    for (var i = 0; i < cfg.batches.length; i++) {
+      var b = cfg.batches[i];
+      var bk = b.type + '|' + b.lot;
+      if (fileKeys[bk]) {
+        fileKeys[bk].seen = true;
+        newBatches.push(b);
+        kept++;
       } else {
-        if (!fam) {
-          skippedOther++;
-          skippedMap[t] = (skippedMap[t] || 0) + 1;
-          continue;
-        }
-        if (cfg.batches.length >= 100) continue;   // 儲存上限（實務不會達到）
-        var nb = { type: t, lot: l, exp: exp, family: fam };
-        cfg.batches.push(nb);
-        byKey[k] = nb;
-        added++;
-        addedList.push({ type: t, lot: l });
+        removed++;
+        removedKeys[bk] = true;
+        removedList.push({ type: b.type, lot: b.lot });
       }
     }
+    // 檔有＋記憶沒有→新增（總數必 ≤100，上限已於前面擋下）
+    var added = 0, addedList = [];
+    for (var f = 0; f < fileOrder.length; f++) {
+      var fk = fileKeys[fileOrder[f]];
+      if (fk.seen) continue;
+      newBatches.push({ type: fk.type, lot: fk.lot, exp: fk.exp, family: fk.family });
+      added++;
+      addedList.push({ type: fk.type, lot: fk.lot });
+    }
+    cfg.batches = newBatches;
+    // 被刪批次的上次拉選記憶一併清
+    cfg.lastPick = cfg.lastPick || {};
+    for (var lp in cfg.lastPick) {
+      if (removedKeys[cfg.lastPick[lp]]) delete cfg.lastPick[lp];
+    }
+
     var saved = saveNiisExportConfig(cfg);
     if (!saved.success) return saved;
     var skippedList = [];
     for (var sk in skippedMap) skippedList.push({ type: sk, count: skippedMap[sk] });
-    return { success: true, config: saved.config, added: added, updated: updated, unchanged: unchanged,
-             skippedOther: skippedOther, addedList: addedList, updatedList: updatedList,
-             unchangedList: unchangedList, skippedList: skippedList, sheetOk: saved.sheetOk };
+    return { success: true, config: saved.config, added: added, removed: removed, kept: kept,
+             skippedOther: skippedOther, addedList: addedList, removedList: removedList,
+             skippedList: skippedList, sheetOk: saved.sheetOk };
   } catch (error) {
     return { success: false, error: error.toString() };
   }

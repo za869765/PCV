@@ -385,6 +385,35 @@ h1::after {
     display: inline-block;
 }
 
+/* v6.3：主頁「匯入針劑」常駐按鈕（內含隱形 file input，點即選檔） */
+.big-button.stock-button {
+    background: linear-gradient(135deg, #0d9488, #0f766e);
+    color: white;
+    display: inline-block;
+    position: relative;
+    overflow: hidden;
+}
+
+.big-button.stock-button input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* v6.3：齒輪內的判讀設定入口 */
+.settings-rule-links {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
 .big-button.print-button[style*="inline-block"],
 .big-button.send-button[style*="inline-block"] {
     animation: actionBtnIn 0.55s var(--ease-out-back) both;
@@ -1314,15 +1343,19 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     flex-shrink: 0;
 }
 
-/* 橫式全螢幕 2×2 四宮格：固定四大格吃滿整頁高度，內容在格內展開 */
+/* v6.3：恆定宮格——依有名單的類別數排欄（n1/n2/n3），格子固定不變形、內容格內捲動 */
 #exportBody {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 14px;
     flex: 1;
     min-height: 0;
 }
+
+#exportBody.n1 { grid-template-columns: 1fr; }
+#exportBody.n2 { grid-template-columns: 1fr 1fr; }
+#exportBody.n3 { grid-template-columns: 1fr 1fr 1fr; }
 
 #exportBody .exp-sec {
     margin-bottom: 0;
@@ -1330,73 +1363,34 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     min-height: 0;
 }
 
-#exportBody .exp-sec.empty {
-    opacity: 0.6;
+/* 頂部共用列（機構/接種日期）：橫跨整排、不佔宮格 */
+.exp-topbar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: flex-end;
+    gap: 18px;
+    flex-wrap: wrap;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 8px 14px;
 }
 
-/* 手風琴：預設縮小只留標題＋摘要，點擊展開 */
-/* 可點擊表頭＝藍色漸層底＋hover 加深＋👆手勢引導；與不可點區域明顯區別 */
+/* 本次無任何名單時的空狀態 */
+.exp-empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #94a3b8;
+    padding: 60px 0;
+    font-size: 1.05rem;
+}
+
 .exp-sec-title {
-    cursor: pointer;
     user-select: none;
     background: linear-gradient(135deg, #e8f1fd, #d9e9fb);
     border: 1px solid #b9d4f5;
     border-radius: 8px;
     padding: 8px 12px;
-    transition: background-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.exp-sec-title:hover {
-    background: linear-gradient(135deg, #d9e9fb, #c8dff9);
-    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.18);
-}
-
-.exp-sec-title::after {
-    content: "👆";
-    font-size: 15px;
-    margin-left: 6px;
-    animation: tapBob 1.2s ease-in-out infinite;
-}
-
-@keyframes tapBob {
-    0%, 100% { transform: translateY(0); }
-    50%      { transform: translateY(-4px); }
-}
-
-/* 不可點（未夾帶佔位）：灰底、無手勢、預設游標 */
-.exp-sec.empty .exp-sec-title {
-    background: #f1f3f6;
-    border-color: #e2e8f0;
-    cursor: default;
-}
-
-.exp-sec.empty .exp-sec-title:hover {
-    box-shadow: none;
-}
-
-.exp-sec.empty .exp-sec-title::after {
-    content: none;
-}
-
-.exp-caret {
-    display: inline-block;
-    transition: transform 0.25s ease;
-    color: #94a3b8;
-    font-size: 0.85rem;
-}
-
-.exp-sec.open .exp-caret {
-    transform: rotate(90deg);
-}
-
-.exp-sum {
-    font-size: 12.5px;
-    color: #64748b;
-    padding: 2px 0 4px;
-}
-
-#exportBody .exp-sec:not(.open) > *:not(.exp-sec-title):not(.exp-sum):not(.batch-chips) {
-    display: none;
 }
 
 /* 目前記憶針劑小卡（v5.7）：收合時也顯示；聚焦模式下未展開格只剩標題 */
@@ -1475,28 +1469,30 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     vertical-align: 1px;
 }
 
-/* 縮小容器標題列的類別摘要（展開時隱藏，改看完整小卡） */
-.fam-brief {
-    margin-left: 10px;
-    font-size: 12px;
-    font-weight: 500;
-    color: #475569;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 2px 8px;
-}
-
-.exp-sec.open .fam-brief { display: none; }
-
 @keyframes chipPulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.28); }
     50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, 0); }
 }
 
-#exportBody.focus .exp-sec:not(.open) .batch-chips {
-    display: none;   /* 聚焦時未展開格只剩標題列 */
+/* v6.3：主頁針劑記憶一覽（匯入針劑按鈕旁） */
+#mainBatchArea {
+    margin: 6px auto 0;
+    max-width: 980px;
+    text-align: left;
 }
+
+#mainBatchChips .batch-chips { justify-content: center; }
+
+.fam-cap {
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 6px;
+    padding: 2px 8px;
+}
+
+.fam-cap.corona { color: #c62828; background: #ffebee; }
+.fam-cap.flu { color: #1565c0; background: #e3f2fd; }
+.fam-cap.lung { color: #e65100; background: #fff3e0; }
 
 /* 匯入結果明細（v5.7） */
 .imp-detail {
@@ -1513,56 +1509,16 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 .imp-detail summary { cursor: pointer; color: #2563eb; font-weight: 600; }
 .imp-detail details div { margin-top: 4px; line-height: 1.55; word-break: break-all; }
 
-#exportBody .exp-sec.open .exp-sum {
-    display: none;
-}
-
-/* 聚焦模式：任一格展開時 → 其他格縮成只剩標題列，展開格吃滿剩餘全螢幕 */
-#exportBody.focus {
-    display: flex;
-    flex-direction: column;
-}
-
-#exportBody.focus .exp-sec:not(.open) {
-    flex: 0 0 auto;
-    overflow: hidden;
-    padding-top: 10px;
-    padding-bottom: 10px;
-    background: #e8ecf1;   /* 未聚焦：暗底色，明顯區分目前工作區 */
-    opacity: 0.72;
-    transition: opacity 0.2s ease, background-color 0.2s ease;
-}
-
-#exportBody.focus .exp-sec:not(.open):hover {
-    background: #f2f5f9;
-    opacity: 1;
-}
-
-#exportBody.focus .exp-sec.open {
-    box-shadow: 0 0 0 2.5px rgba(112, 72, 168, 0.30), 0 8px 24px rgba(0, 0, 0, 0.08);
-}
-
-#exportBody.focus .exp-sec:not(.open) .exp-sum {
-    display: none;   /* 只剩標題 */
-}
-
-#exportBody.focus .exp-sec.open {
-    flex: 1;
-    min-height: 0;
-}
-
-#exportBody.focus .exp-sec:not(.open) .exp-sec-title {
-    margin-bottom: 0;
-}
-
 @media (max-width: 1100px) {
-    #exportBody {
+    #exportBody,
+    #exportBody.n1, #exportBody.n2, #exportBody.n3 {
         grid-template-columns: 1fr;
         grid-template-rows: none;
+        grid-auto-rows: minmax(240px, auto);
     }
 }
 
-/* 四大容器（共用灰／新冠紅／流感藍／肺鏈橘） */
+/* 疫苗容器（新冠紅／流感藍／肺鏈橘） */
 .exp-sec {
     background: #fff;
     border: 2px solid #e2e8f0;
@@ -1573,7 +1529,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     animation: fadeUpIn 0.4s var(--ease-out-quart) both;
 }
 
-.exp-sec.common { border-left-color: #64748b; }
 .exp-sec.k { border-left-color: #f44336; }
 .exp-sec.z { border-left-color: #2196f3; }
 .exp-sec.v { border-left-color: #ff9800; }
@@ -1586,36 +1541,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-}
-
-/* 結存量夾帶區（主頁同款虛線樣式） */
-.exp-drop {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 56px;
-    border: 3px dashed #bdc3c7;
-    border-radius: 12px;
-    background: #f8f9fa;
-    color: #7f8c8d;
-    font-size: 0.9rem;
-    font-weight: 500;
-    transition: all var(--transition-speed) ease;
-    overflow: hidden;
-}
-
-.exp-drop input[type="file"] {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-}
-
-.exp-drop:hover {
-    border-color: var(--primary-color);
-    background: #e3f2fd;
-    transform: scale(1.01);
 }
 
 /* 流感名單列與工具列 */
@@ -2045,7 +1970,14 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             <div class="button-group">
                 <button type="button" class="big-button print-button" id="printButton" onclick="printPage()">一鍵列印</button>
                 <button type="button" class="big-button send-button" id="sendButton" onclick="showSendModal()">寄給承辦</button>
-                <button type="button" class="big-button export-button" id="exportButton" data-tip="設定身分別並把 HIS 檔中 NIIS 名單沒有的人&#10;產成媒體資料上傳檔（Big5 CSV）可直接匯入 NIIS&#10;未夾 HIS 檔也可先進入匯入針劑（庫存量／結存量）" onclick="openExport()">身分別設定與匯出</button>
+                <button type="button" class="big-button export-button" id="exportButton" data-tip="把名單（NIIS＋HIS）套上針劑批號與身分別&#10;產成媒體資料上傳檔（Big5 CSV）可直接匯入 NIIS" onclick="openExport()">套入針劑與匯出</button>
+                <button type="button" class="big-button stock-button" id="stockButton" data-tip="夾帶 NIIS 結存量(.xls)或庫存量查詢(.xlsx)檔&#10;以檔為準同步：檔裡沒有的視同用完自動刪除&#10;匯入即存試算表「針劑記憶」，免按任何儲存"><input type="file" id="mainStockFiles" accept=".xls,.xlsx,.csv" multiple onchange="importStockFiles()">匯入針劑</button>
+            </div>
+
+            <!-- v6.3：主頁針劑記憶一覽（過期已自動清；✕＝效期內但已用完手動刪） -->
+            <div id="mainBatchArea" style="display:none;">
+                <div id="mainBatchChips"></div>
+                <div id="mainImportDetail"></div>
             </div>
         </form>
 
@@ -2128,6 +2060,12 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     按「複製」可以以現有群組為底新增辨識群組（含針數區塊）。儲存後立即重新統計。
                 </div>
                 <div id="settingsList"></div>
+                <!-- v6.3：身分別自動判讀設定整合到這裡（原在匯出面板各容器） -->
+                <div class="settings-rule-links">
+                    <span style="font-weight:600;">身分別自動判讀設定：</span>
+                    <button type="button" class="s-btn s-copy" data-tip="新冠依年齡自動判讀的對照表&#10;（7 區間代碼可編輯，存雲端全所共用）" onclick="openRuleSettings('covid')">🦠 新冠（年齡對照表）</button>
+                    <button type="button" class="s-btn s-copy" data-tip="流感公費門檻、所內/外設預設代號、&#10;對象別 F 代碼表（存雲端全所共用）" onclick="openRuleSettings('flu')">💉 流感（門檻與代碼）</button>
+                </div>
             </div>
             <div class="custom-modal-footer">
                 <button class="modal-btn modal-btn-danger" data-tip="移除所有自訂修改&#10;立即恢復系統內建六組規則&#10;並清除舊統計結果重新計算" onclick="resetSettings()">還原預設</button>
@@ -2137,11 +2075,11 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         </div>
     </div>
 
-    <!-- 身分別設定與匯出 Modal（全螢幕） -->
+    <!-- 套入針劑與匯出 Modal（全螢幕） -->
     <div id="exportModal" class="custom-modal-overlay">
         <div class="custom-modal-container">
             <div class="custom-modal-header">
-                <h2>📤 身分別設定與匯出</h2>
+                <h2>📤 套入針劑與匯出</h2>
                 <button class="custom-modal-close" onclick="closeExport()">&times;</button>
             </div>
             <div class="custom-modal-body">
@@ -2149,8 +2087,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             </div>
             <div class="custom-modal-footer">
                 <button class="modal-btn modal-btn-secondary" onclick="closeExport()">取消</button>
-                <button class="modal-btn modal-btn-secondary" data-tip="防呆提醒：針劑匯入當下已自動存入試算表&#10;此鈕只存「批次拉選/劑別/日期」等偏好&#10;（按產生並下載時也會自動存，平常可不按）" onclick="saveExportConfigOnly()">儲存設定</button>
-                <button class="modal-btn modal-btn-primary" data-tip="產生媒體資料上傳檔（Big5 CSV）並下載&#10;同時儲存目前設定供下次使用" onclick="generateNiisFile()">產生並下載</button>
+                <button class="modal-btn modal-btn-primary" data-tip="產生媒體資料上傳檔（Big5 CSV）並下載&#10;（拉選偏好會自動儲存供下次使用）" onclick="generateNiisFile()">產生並下載</button>
             </div>
         </div>
     </div>
@@ -2201,7 +2138,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.2</div>
+    <div class="version-tag">v6.3</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2395,7 +2332,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         var slotPersonBatch = { k: {}, z: {}, v: {} };   // 各檔每人個別針劑（id -> 'type|lot'，跨重繪保留）
 
         var expOutpost = false;   // 本場為外設站（流感預設 F03A↔F03B；每次開面板重設為所內）
-        var expOpenSec = '';      // 手風琴：目前展開的容器（''=全部縮小；common/k/z/v）
 
         // 預設接種日期：今天或過去最近的禮拜四（當天是週四即押當天）
         function defaultThursdayISO() {
@@ -2529,9 +2465,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function updateDateRoc() {
             var el = document.getElementById('expDateRoc');
             if (el) el.textContent = currentRocDate() || '—';
-            var sc = document.getElementById('expSum_common');
-            if (sc) sc.textContent = '機構 ' + ((exportConfig && exportConfig.org) || '2341050013') +
-                '｜接種日 民國 ' + (currentRocDate() || '—') + '｜針劑匯入・日期設定　▸ 點擊展開';
         }
 
         function onDateChanged() {
@@ -2542,18 +2475,19 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             refreshExpiryMarks();      // 針劑效期⚠／紅標同步（原地刷新不重繪）
         }
 
+        // v6.3：面板＝純「套針劑並產檔」——先載名單再繪，只出現當次有名單的疫苗容器
         function openExport() {
-            // v5.6：不再要求先夾 HIS 檔——沒名單也能進面板匯入針劑（庫存量／結存量）
             expOutpost = false;   // 每次開面板重設為所內
-            expOpenSec = '';      // 預設全部縮小，點選才展開
             document.getElementById('exportModal').classList.add('show');
+            document.getElementById('exportBody').className = '';
             document.getElementById('exportBody').innerHTML =
                 '<div class="empty-state"><div class="hourglass-loader"></div>' +
-                '<div class="empty-state-text pulse-effect">載入設定中<span class="loading-dots"></span></div></div>';
+                '<div class="empty-state-text pulse-effect">載入名單中<span class="loading-dots"></span></div></div>';
             google.script.run
                 .withSuccessHandler(function(cfg) {
                     exportConfig = cfg || { org: '', idCodes: {}, batches: [], lastPick: {} };
-                    renderExport();
+                    renderMainBatches();
+                    loadSlotLists();   // 載完名單才 renderExport
                 })
                 .withFailureHandler(function(err) {
                     closeExport();
@@ -2608,64 +2542,62 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             }
         }
 
-        // 匯入結果明細（共用格；<details> 可展開加入/更新/略過清單）
+        // 匯入結果明細（主頁；v6.3 同步語意＝加入／保留／刪除／略過）
         function importDetailHtml() {
             var d = lastImportDetail;
             if (!d) return '';
-            var h = '<div class="imp-detail"><div>✔ 加入 ' + d.added + ' 筆、更新 ' + d.updated + ' 筆' +
-                (d.unchanged ? '、已存在無變動 ' + d.unchanged + ' 筆' : '') +
-                (d.skippedOther ? '、略過非目標疫苗 ' + d.skippedOther + ' 筆' : '') +
-                (d.sheetOk ? '——已自動存入試算表「針劑記憶」（<b>免按儲存設定</b>），可直接開表檢視/修改'
-                           : '——已自動存雲端（<b>免按儲存設定</b>）') + '</div>';
+            var parts = ['新增 ' + d.added + ' 筆', '保留 ' + (d.kept || 0) + ' 筆'];
+            if (d.removed) parts.push('已用完刪除 ' + d.removed + ' 筆');
+            if (d.skippedOther) parts.push('略過非目標疫苗 ' + d.skippedOther + ' 筆');
+            var h = '<div class="imp-detail"><div>✔ ' + parts.join('、') +
+                (d.sheetOk ? '——已自動存入試算表「針劑記憶」（<b>免按任何儲存</b>），可直接開表檢視/修改'
+                           : '——已自動存雲端（<b>免按任何儲存</b>）') + '</div>';
             function items(list) {
                 return list.map(function(x) { return escAttr(x.type) + '｜' + escAttr(x.lot); }).join('、');
             }
             var rows = '';
-            if (d.addedList && d.addedList.length) rows += '<div><b>加入：</b>' + items(d.addedList) + '</div>';
-            if (d.updatedList && d.updatedList.length) rows += '<div><b>更新（效期有變）：</b>' + items(d.updatedList) + '</div>';
-            if (d.unchangedList && d.unchangedList.length) rows += '<div><b>已存在無變動：</b>' + items(d.unchangedList) + '</div>';
+            if (d.addedList && d.addedList.length) rows += '<div><b>新增：</b>' + items(d.addedList) + '</div>';
+            if (d.removedList && d.removedList.length) rows += '<div><b>刪除（庫存檔已無，視同用完）：</b>' + items(d.removedList) + '</div>';
             if (d.skippedList && d.skippedList.length) rows += '<div><b>略過（非新冠/流感/肺鏈，不干預）：</b>' +
                 d.skippedList.map(function(x) { return escAttr(x.type) + (x.count > 1 ? '×' + x.count : ''); }).join('、') + '</div>';
-            if (rows) h += '<details open><summary>本次匯入明細</summary>' + rows + '</details>';   // 匯入後預設展開完整明細
+            if (rows) h += '<details open><summary>本次匯入明細</summary>' + rows + '</details>';
             return h + '</div>';
         }
 
-        // 各容器「目前記憶針劑」小卡（含佔位容器也顯示；效期早於接種日→紅標；✕可刪）
-        // v6.1：依效期「舊→新」排序——舊的排最前面，順手就能刪，不用在選單裡翻找
-        function famChipsHtml(fam) {
-            var list = [];
-            ((exportConfig && exportConfig.batches) || []).forEach(function(b, bi) {
-                if (b.family === fam) list.push({ b: b, bi: bi });
+        // v6.3：主頁「目前針劑」一覽（依類別分組、效期舊→新；過期已由後端自動清除）
+        //       ✕＝還在效期內但已用完，手動移除
+        function renderMainBatches() {
+            var area = document.getElementById('mainBatchArea');
+            var box = document.getElementById('mainBatchChips');
+            var det = document.getElementById('mainImportDetail');
+            if (!area || !box) return;
+            var batches = (exportConfig && exportConfig.batches) || [];
+            if (det) det.innerHTML = importDetailHtml();
+            if (!batches.length) {
+                box.innerHTML = '<div class="batch-chips"><span class="batch-chips-none">目前沒有針劑資料——請按「匯入針劑」夾帶 NIIS 庫存量檔</span></div>';
+                area.style.display = '';
+                return;
+            }
+            function expNum(e) { var n = parseInt(String(e == null ? '' : e).replace(/\D/g, ''), 10); return isNaN(n) ? Infinity : n; }
+            var FAM_LABEL = { corona: '🦠 新冠', flu: '💉 流感', lung: '🫁 肺鏈' };
+            var html = '';
+            ['corona', 'flu', 'lung'].forEach(function(fam) {
+                var list = [];
+                batches.forEach(function(b, bi) { if (b.family === fam) list.push({ b: b, bi: bi }); });
+                if (!list.length) return;
+                list.sort(function(x, y) { return expNum(x.b.exp) - expNum(y.b.exp); });   // 舊→新，無效期最後
+                html += '<div class="batch-chips"><span class="fam-cap ' + fam + '">' + FAM_LABEL[fam] + '</span>';
+                list.forEach(function(it) {
+                    var b = it.b;
+                    html += '<span class="batch-chip" data-exp="' + escAttr(b.exp || '') +
+                        '" data-tip="存於試算表「針劑記憶」&#10;效期舊→新排序；過期會自動移除&#10;✕＝效期內但已用完，手動移除">' +
+                        escAttr(b.type) + '｜' + escAttr(b.lot) + (b.exp ? '<i>效期 ' + escAttr(b.exp) + '</i>' : '') +
+                        '<b class="chip-x" data-tip="此批已用完 → 從記憶與試算表移除" onclick="removeChipBatch(event,' + it.bi + ')">✕</b></span>';
+                });
+                html += '</div>';
             });
-            list.sort(function(x, y) {
-                function expNum(e) { var n = parseInt(String(e == null ? '' : e).replace(/\D/g, ''), 10); return isNaN(n) ? Infinity : n; }
-                return expNum(x.b.exp) - expNum(y.b.exp);   // 無效期排最後
-            });
-            var chips = '';
-            list.forEach(function(it) {
-                var b = it.b;
-                var bad = isExpiredRoc(b.exp);
-                chips += '<span class="batch-chip' + (bad ? ' expired' : '') + '" data-exp="' + escAttr(b.exp || '') +
-                    '" data-tip="記憶中的針劑（存於試算表「針劑記憶」）&#10;效期早於接種日期會紅色標示&#10;列表依效期舊→新排序">' +
-                    escAttr(b.type) + '｜' + escAttr(b.lot) + (b.exp ? '<i>效期 ' + escAttr(b.exp) + '</i>' : '') +
-                    '<b class="chip-x" data-tip="從記憶與試算表移除此針劑" onclick="removeChipBatch(event,' + it.bi + ')">✕</b></span>';
-            });
-            return '<div class="batch-chips"><span class="batch-chips-cap">目前記憶針劑<i class="chips-order">（舊→新）</i></span>' +
-                (chips || '<span class="batch-chips-none">尚無——夾帶庫存量檔或手動新增</span>') + '</div>';
-        }
-
-        // 縮小容器標題列的「類別摘要」：只列種類代號（×數量），展開時隱藏（改看完整小卡）
-        function famBriefHtml(fam) {
-            var cnt = Object.create(null), order = [];   // 檔案來的 type 當 key，避免原型屬性碰撞
-            ((exportConfig && exportConfig.batches) || []).forEach(function(b) {
-                if (b.family !== fam) return;
-                if (!cnt[b.type]) { cnt[b.type] = 0; order.push(b.type); }
-                cnt[b.type]++;
-            });
-            if (!order.length) return '';
-            return '<span class="fam-brief">' + order.map(function(t) {
-                return escAttr(t) + (cnt[t] > 1 ? '×' + cnt[t] : '');
-            }).join('｜') + '</span>';
+            box.innerHTML = html;
+            area.style.display = '';
         }
 
         // 從記憶移除指定批次（含 lastPick 清理），並立即存雲端＋試算表
@@ -2679,6 +2611,12 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             });
         }
 
+        function exportModalOpen() {
+            var m = document.getElementById('exportModal');
+            return !!(m && m.classList.contains('show'));
+        }
+
+        // 存回雲端＋試算表後刷新主頁小卡（面板開著就一併重繪）
         function persistBatches(okTitle, okMsg) {
             google.script.run
                 .withSuccessHandler(function(res) {
@@ -2686,7 +2624,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                         res.config._uiDateIso = (exportConfig || {})._uiDateIso;
                         res.config._uiDose = (exportConfig || {})._uiDose;
                         exportConfig = res.config;
-                        renderExport();
+                        renderMainBatches();
+                        if (exportModalOpen()) renderExport();
                         showFx('success', okTitle, okMsg + (res.sheetOk ? '（試算表已同步）' : ''), 2200);
                     } else showFx('error', '儲存失敗', (res && res.error) || '未知錯誤', 3200);
                 })
@@ -2699,10 +2638,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var b = exportConfig && exportConfig.batches[bi];
             if (!b) return;
             var key = b.type + '|' + b.lot;   // 存穩定 key，確認當下重找（確認期間清單可能被非同步回應換掉）
-            showConfirm('刪除針劑', '確定從記憶清單移除「' + b.type + '｜' + b.lot + '」？（同步從試算表移除）', function() {
-                collectExportInputs();
+            showConfirm('刪除針劑', '確定移除「' + b.type + '｜' + b.lot + '」？（此批已用完；同步從試算表移除）', function() {
+                if (exportModalOpen()) collectExportInputs();
                 var idx = findBatchIdx(key);
-                if (idx < 0) { showModal('針劑清單剛更新過，該筆已不存在，請重新操作！'); renderExport(); return; }
+                if (idx < 0) { showModal('針劑清單剛更新過，該筆已不存在，請重新操作！'); renderMainBatches(); return; }
                 dropBatchAt(idx);
                 persistBatches('已刪除', key.replace('|', '｜'));
             }, '🗑️');
@@ -2716,31 +2655,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return -1;
         }
 
-        // 一鍵清除效期早於接種日期的針劑（先列名單確認；存 key 集合，確認當下重找索引）
-        function clearExpiredBatches() {
-            collectExportInputs();
-            var badKeys = [], names = [];
-            ((exportConfig && exportConfig.batches) || []).forEach(function(b) {
-                if (!isExpiredRoc(b.exp)) return;
-                badKeys.push(b.type + '|' + b.lot);
-                names.push(b.type + '｜' + b.lot + '（效期 ' + b.exp + '）');
-            });
-            if (!badKeys.length) { showModal('目前沒有效期早於接種日期的針劑！'); return; }
-            showConfirm('清除已過期針劑', '將移除 ' + badKeys.length + ' 筆：' + names.join('、') + '（同步從試算表移除）', function() {
-                // 確認當下重掃一次：同 key 重複實例各自成索引（不會重複刪同一索引誤刪鄰筆），且只刪真的過期者
-                var keySet = Object.create(null);
-                badKeys.forEach(function(k) { keySet[k] = 1; });
-                var idxs = [];
-                ((exportConfig && exportConfig.batches) || []).forEach(function(b, i) {
-                    if (keySet[b.type + '|' + b.lot] && isExpiredRoc(b.exp)) idxs.push(i);
-                });
-                idxs.sort(function(a, b2) { return b2 - a; });   // 降序刪除防索引位移
-                if (!idxs.length) { showModal('針劑清單剛更新過，已無可清除項目！'); renderExport(); return; }
-                for (var i = 0; i < idxs.length; i++) dropBatchAt(idxs[i]);
-                persistBatches('已清除過期針劑', idxs.length + ' 筆');
-            }, '🧹');
-        }
-
         function fluOptionsHtml(defaultLabel) {
             var list = fluCodeList();
             var opts = '<option value="">' + defaultLabel + '</option>';
@@ -2750,138 +2664,98 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return opts;
         }
 
+        // v6.3：恆定多宮格——只出現「當次有名單」的疫苗容器；共用設定改頂列；
+        //       設定移至主頁齒輪、針劑匯入移至主頁按鈕，故此面板＝純套針劑＋產檔
         function renderExport() {
             var cfg = exportConfig;
-            var slots = ['k', 'z', 'v'];
             var SLOT_SEC = {
-                k: { icon: '🦠', title: '新冠 6K', note: '身分別：依年齡自動判讀（可按右上⚙檢視/修改對照表）' },
+                k: { icon: '🦠', title: '新冠 6K', note: '身分別：依年齡自動判讀（主頁⚙可修改對照表）' },
                 z: { icon: '💉', title: '流感 6Z', note: '' },
                 v: { icon: '🫁', title: '肺鏈 6V', note: '身分別：免填' }
             };
-            var html = '';
-
-            // 記憶值自動填（datalist）：依疫苗類別隔離——新冠>新冠、流感>流感、肺鏈>肺鏈（未歸類不列）
-            ['k', 'z', 'v'].forEach(function(sl) {
-                var famX = SLOT_FAMILY[sl];
-                var dt = {}, dl = {};
-                (cfg.batches || []).forEach(function(b) {
-                    if (b.family !== famX) return;
-                    if (b.type) dt[b.type] = 1;
-                    if (b.lot) dl[b.lot] = 1;
-                });
-                html += '<datalist id="dlTypes_' + sl + '">' + Object.keys(dt).map(function(t) { return '<option value="' + escAttr(t) + '">'; }).join('') + '</datalist>';
-                html += '<datalist id="dlLots_' + sl + '">' + Object.keys(dl).map(function(l) { return '<option value="' + escAttr(l) + '">'; }).join('') + '</datalist>';
+            var slots = ['k', 'z', 'v'].filter(function(s) {
+                return (slotPersonList[s] || []).length > 0;
             });
+            var body = document.getElementById('exportBody');
+            body.className = slots.length ? ('n' + slots.length) : '';
 
-            // ── 容器 1：檔案上傳與共用設定（手風琴：點標題展開；判讀設定已回歸各疫苗容器） ──
-            html += '<div class="exp-sec common' + (expOpenSec === 'common' ? ' open' : '') + '">';
-            html += '<div class="exp-sec-title" onclick="expToggleSec(\'common\', event)"><span class="exp-caret">▸</span>📁 檔案與共用設定</div>';
-            html += '<div class="exp-sum" id="expSum_common">機構 ' + escAttr(cfg.org || '2341050013') + '｜接種日 民國 ' + escAttr(isoToRoc(cfg._uiDateIso || defaultThursdayISO()) || '—') + '｜針劑匯入・日期設定　▸ 點擊展開</div>';
-            html += '<div class="exp-drop" data-tip="NIIS 匯出的結存量檔（.xls）或&#10;庫存量查詢檔（.xlsx）皆可&#10;可一次多選，夾帶後自動解析&#10;針劑自動歸類並存入試算表「針劑記憶」&#10;（免按儲存，匯入即存）"><input type="file" id="expStockFiles" accept=".xls,.xlsx,.csv" multiple onchange="importStockFiles()"><span>📎 夾帶結存量／庫存量檔（可多選，夾帶後自動解析）</span></div>';
-            html += '<div id="expStockMsg" style="font-size:12.5px;color:#c0392b;margin:6px 0 4px;"></div>';
-            html += importDetailHtml();
-            html += '<div class="settings-row-head" style="align-items:flex-end;margin-bottom:0;">';
+            // ── 頂列：機構／接種日期（橫跨整排，不佔宮格） ──
+            var html = '<div class="exp-topbar">';
             html += '<div class="s-field" data-tip="固定值（佳里區衛生所），僅檢視"><span class="s-cap">接種機構代碼</span><div style="font-weight:600;padding:7px 2px;">' + escAttr(cfg.org || '2341050013') + '</div></div>';
             html += '<div class="s-field" data-tip="預設＝今天或過去最近的禮拜四&#10;（當天是週四即押當天）&#10;月份會影響流感公費門檻判斷"><span class="s-cap">接種日期</span><input type="date" class="s-input" id="expDate" value="' + escAttr(cfg._uiDateIso || defaultThursdayISO()) + '" onchange="onDateChanged()"></div>';
             html += '<div class="s-field"><span class="s-cap">民國</span><div style="font-weight:600;padding:7px 2px;font-size:1.05rem;" id="expDateRoc">—</div></div>';
-            html += '<button type="button" class="s-btn s-del" data-tip="一鍵移除效期早於接種日期的針劑&#10;會先列出名單確認，同步從試算表移除" onclick="clearExpiredBatches()">🧹 清除已過期</button>';
-            html += '</div></div>';
+            html += '<div class="s-field s-field-grow" style="color:#94a3b8;font-size:12.5px;padding-bottom:8px;">針劑批號在主頁「匯入針劑」維護；判讀設定在主頁右上 ⚙</div>';
+            html += '</div>';
 
-            // ── 容器 2~4：各 HIS 檔（新冠紅／流感藍／肺鏈橘），未夾帶顯示佔位 ──
+            if (slots.length === 0) {
+                html += '<div class="exp-empty-state">本次名單沒有可匯出的疫苗類別<br><span style="font-size:0.9rem;">請先在主頁上傳 NIIS 名單或夾帶 HIS 掛號檔</span></div>';
+                body.innerHTML = html;
+                return;
+            }
+
+            // ── 各疫苗容器（新冠紅／流感藍／肺鏈橘）：位置固定、內容格內捲動 ──
             for (var si = 0; si < slots.length; si++) {
                 var slot = slots[si];
                 var sec = SLOT_SEC[slot];
-                // 各疫苗自己的判讀設定齒輪（新冠=年齡對照表；流感=門檻/代號/F代碼表；肺鏈免填不設）
-                var gearTip = slot === 'k'
-                    ? '新冠判讀設定&#10;年齡對照代碼表（存雲端，全所共用）'
-                    : '流感判讀設定&#10;公費門檻、所內/所外預設代號、對象別代碼表&#10;（存雲端，全所共用）';
-                var gearOf = function(withMargin) {
-                    if (slot === 'v') return '';
-                    return '<button type="button" class="s-btn s-copy"' + (withMargin ? ' style="margin-left:auto;"' : '') +
-                        ' data-tip="' + gearTip + '" onclick="openRuleSettings(\'' + (slot === 'k' ? 'covid' : 'flu') + '\')">⚙ 判讀設定</button>';
-                };
-                // v6.2：夾了 HIS 檔「或」主頁有 NIIS 名單 → 完整容器（NIIS 的人也要分配針劑/身分別）
-                if (!phisFiles[slot] && !currentFile) {
-                    html += '<div class="exp-sec ' + slot + ' empty"><div class="exp-sec-title" style="cursor:default;">' + sec.icon + ' ' + sec.title + famBriefHtml(SLOT_FAMILY[slot]) + gearOf(true) + '</div>';
-                    html += '<div class="exp-sum">未夾帶 ' + PHIS_META[slot].expect + ' 掛號檔、也未上傳 NIIS 名單（回主頁夾帶後即出現名單）</div>';
-                    html += famChipsHtml(SLOT_FAMILY[slot]);   // 沒名單也看得到目前記憶針劑
-                    html += '</div>';
-                    continue;
-                }
                 var fam = SLOT_FAMILY[slot];
                 var srcLabel = phisFiles[slot]
                     ? escAttr(phisFiles[slot].name) + (currentFile ? '＋NIIS 名單' : '')
                     : 'NIIS 名單';
-                html += '<div class="exp-sec ' + slot + (expOpenSec === slot ? ' open' : '') + '">';
-                html += '<div class="exp-sec-title" onclick="expToggleSec(\'' + slot + '\', event)"><span class="exp-caret">▸</span>' + sec.icon + ' ' + sec.title + '｜<span style="font-weight:400;font-size:0.9rem;">' + srcLabel + '</span>' + famBriefHtml(fam);
-                if (slot === 'k') html += gearOf(true);
+                html += '<div class="exp-sec ' + slot + '">';
+                html += '<div class="exp-sec-title">' + sec.icon + ' ' + sec.title +
+                    '<span style="font-weight:400;font-size:0.86rem;color:#475569;">' + srcLabel + '｜' + slotPersonList[slot].length + ' 人</span>';
                 if (slot === 'z') {
                     var fluIn = escAttr((cfg.idCodes || {}).fluIn || 'F03A');
                     var fluOut = escAttr((cfg.idCodes || {}).fluOut || 'F03B');
-                    // 目前設定＋切換靠左（檔名旁）；⚙判讀設定與新冠一樣靠最右
-                    html += '<span style="margin-left:12px;font-size:0.92rem;font-weight:400;color:#475569;">目前設定是：<b style="color:#1565c0;">' +
+                    html += '<span style="margin-left:auto;font-size:0.9rem;font-weight:400;color:#475569;">目前設定是：<b style="color:#1565c0;">' +
                         (expOutpost ? '🚩 所外 ' + fluOut : '🏠 所內 ' + fluIn) + '</b></span>';
                     html += '<button type="button" class="exp-toggle' + (expOutpost ? ' on' : '') + '" data-tip="切換所內／所外（外設站）&#10;未拉選者預設代號：所內 ' + fluIn + ' ↔ 所外 ' + fluOut + '&#10;已個別拉選者不受影響" onclick="toggleOutpost()">切換</button>';
-                    html += gearOf(true);
                 }
                 html += '</div>';
-                html += '<div class="exp-sum" id="expSum_' + slot + '">' + (slotPersonList[slot].length ? '名單 ' + slotPersonList[slot].length + ' 人｜' : '') + '針劑與名單設定　▸ 點擊展開</div>';
-                html += famChipsHtml(fam);   // 目前記憶針劑一覽（收合時也顯示）
-                if (sec.note) html += '<div style="font-size:12.5px;color:#7f8c8d;margin:-4px 0 8px;">' + sec.note + '</div>';
+                if (sec.note) html += '<div style="font-size:12.5px;color:#7f8c8d;margin:-2px 0 8px;">' + sec.note + '</div>';
+
                 html += '<div class="settings-row-head" style="align-items:flex-end;">';
-                html += '<div class="s-field s-field-grow" data-tip="批次拉選：從記憶的針劑清單選擇&#10;（結存量匯入或手動新增皆會列入）"><span class="s-cap">針劑（疫苗種類｜批號）</span>';
+                html += '<div class="s-field s-field-grow" data-tip="主選針劑：此類別所有人的預設批號&#10;（清單＝主頁匯入的庫存量檔內容）"><span class="s-cap">針劑（疫苗種類｜批號）</span>';
                 html += '<select class="s-input" id="expBatch_' + slot + '">';
                 html += '<option value="-1">— 請選擇 —</option>';
-                var lastKey = (cfg.lastPick || {})[slot] || '';
-                var candidates = 0, lastIdx = -1, onlyIdx = -1;
                 for (var bi = 0; bi < cfg.batches.length; bi++) {
                     var b = cfg.batches[bi];
                     if (b.family && b.family !== fam) continue;
-                    candidates++;
-                    if (onlyIdx === -1) onlyIdx = bi;
-                    if (b.type + '|' + b.lot === lastKey) lastIdx = bi;
                     html += '<option value="' + bi + '">' + escAttr(batchOptionLabel(b)) + '</option>';
                 }
                 html += '</select></div>';
-                html += '<div class="s-field" data-tip="此檔的預設劑別&#10;HIS 檔內「疫苗劑別」欄有值的人優先用檔內值"><span class="s-cap">預設劑別</span><input class="s-input" id="expDose_' + slot + '" style="width:64px;text-align:center;" value="' + escAttr((cfg._uiDose || {})[slot] || '1') + '"></div>';
-                html += '<button type="button" class="s-btn s-del" data-tip="從記憶清單移除目前選中的針劑" onclick="removeBatch(\'' + slot + '\')">刪除</button>';
-                html += '</div>';
-                html += '<div class="settings-row-head" style="align-items:flex-end;margin-top:6px;margin-bottom:0;">';
-                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的「同類疫苗」代號自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">手動新增：疫苗種類代號</span><input class="s-input" id="expNewType_' + slot + '" list="dlTypes_' + slot + '"></div>';
-                html += '<div class="s-field" style="flex:1;min-width:150px;" data-tip="記憶過的「同類疫苗」批號自動列入候選&#10;點欄位即可選擇帶入，帶入後可修改"><span class="s-cap">批號</span><input class="s-input" id="expNewLot_' + slot + '" list="dlLots_' + slot + '"></div>';
-                html += '<button type="button" class="s-btn s-copy" onclick="addManualBatch(\'' + slot + '\')">加入</button>';
+                html += '<div class="s-field" data-tip="此類別的預設劑別&#10;HIS 檔內「疫苗劑別」欄有值的人優先用檔內值"><span class="s-cap">預設劑別</span><input class="s-input" id="expDose_' + slot + '" style="width:64px;text-align:center;" value="' + escAttr((cfg._uiDose || {})[slot] || '1') + '"></div>';
                 html += '</div>';
 
                 // 名單：勾選＋個別拉選（流感=身分別＋針劑；新冠/肺鏈=針劑）＋批次套用
-                html += '<div style="margin-top:14px;">';
+                html += '<div style="margin-top:12px;">';
                 html += '<div style="font-weight:600;margin-bottom:6px;" data-tip="' + (slot === 'z'
-                    ? '每人可個別拉選身分別與針劑&#10;未拉選者：身分別依公費門檻帶預設、針劑用主選&#10;不符門檻→紅底需拉選；已在 NIIS 名單者灰階自動略過'
-                    : '每人可個別拉選針劑（同日多批號分配用）&#10;未拉選者用上方主選針劑&#10;已在 NIIS 名單者灰階自動略過') + '">名單（個別拉選）</div>';
+                    ? '每人可個別拉選身分別與針劑&#10;未拉選者：身分別依公費門檻帶預設、針劑用主選&#10;不符門檻→紅底需拉選'
+                    : '每人可個別拉選針劑（同日多批號分配用）&#10;未拉選者用上方主選針劑') + '">名單（個別拉選）</div>';
                 html += '<div class="flu-tools">';
                 html += '<button type="button" class="s-btn s-copy" onclick="slotCheckAllG(\'' + slot + '\', true)">全選</button>';
                 html += '<button type="button" class="s-btn s-copy" onclick="slotCheckAllG(\'' + slot + '\', false)">全不選</button>';
                 if (slot === 'z') {
                     html += '<button type="button" class="s-btn s-del" data-tip="只勾選紅底（不符公費門檻）者" onclick="fluCheckBad()">只選不符</button>';
-                    html += '<select class="s-input" id="fluBatchCode" style="min-width:170px;flex:1;">' + fluOptionsHtml('（批次套用的身分別）') + '</select>';
+                    html += '<select class="s-input" id="fluBatchCode" style="min-width:150px;flex:1;">' + fluOptionsHtml('（批次套用的身分別）') + '</select>';
                     html += '<button type="button" class="s-btn s-copy" data-tip="把左邊選的身分別一次套用到勾選者" onclick="applyFluBatch()">套用身分別</button>';
                     html += '<button type="button" class="s-btn s-copy" data-tip="列印個別拉選（特殊身分別）人員清單&#10;可選排序、含大勾選框核對特殊憑證留存" onclick="printFluSpecialList()">🖨 特殊清單</button>';
                 }
                 html += '</div>';
                 html += '<div class="flu-tools">';
-                html += '<select class="s-input" id="expBatBatch_' + slot + '" style="min-width:200px;flex:1;">' + slotBatchOptionsHtml(slot, '（批次套用的針劑）') + '</select>';
+                html += '<select class="s-input" id="expBatBatch_' + slot + '" style="min-width:180px;flex:1;">' + slotBatchOptionsHtml(slot, '（批次套用的針劑）') + '</select>';
                 html += '<button type="button" class="s-btn s-copy" data-tip="把左邊選的針劑一次套用到勾選者&#10;同日多批號時先勾人再套用" onclick="applySlotBatch(\'' + slot + '\')">套用針劑</button>';
                 html += '</div>';
-                html += '<div id="' + (slot === 'z' ? 'expFluList' : 'expList_' + slot) + '">讀取名單中…</div>';
+                html += '<div id="' + (slot === 'z' ? 'expFluList' : 'expList_' + slot) + '"></div>';
                 html += '</div>';
                 html += '</div>';
             }
-            document.getElementById('exportBody').innerHTML = html;
+            body.innerHTML = html;
 
-            // 預選：上次選過的優先，否則清單只有一支時自動選
-            for (var sj = 0; sj < slots.length; sj++) {
-                var slot2 = slots[sj];
+            // 主選預選：上次選過的優先，否則該類別只有一支時自動選
+            slots.forEach(function(slot2) {
                 var sel = document.getElementById('expBatch_' + slot2);
-                if (!sel) continue;
+                if (!sel) return;
                 var fam2 = SLOT_FAMILY[slot2];
                 var lastKey2 = (exportConfig.lastPick || {})[slot2] || '';
                 var pickIdx = -1, cand = [];
@@ -2893,10 +2767,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 }
                 if (pickIdx === -1 && cand.length === 1) pickIdx = cand[0];
                 if (pickIdx >= 0) sel.value = String(pickIdx);
-            }
+            });
 
             updateDateRoc();
-            loadSlotLists();
+            slots.forEach(function(s) { renderSlotRows(s); });
         }
 
         // 解析 6Z 檔名單（前端，表頭偵測同後端）
@@ -2945,10 +2819,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function listBoxOf(slot) { return document.getElementById(slot === 'z' ? 'expFluList' : 'expList_' + slot); }
 
         // v6.2：容器名單＝HIS 檔的人 ∪ NIIS 名單該類別的人（去重、依姓名排序；NIIS 的人標記來源）
+        // v6.3：載完名單才 renderExport（只出現有名單的類別）
         function loadSlotLists() {
             var hisSlots = ['k', 'z', 'v'].filter(function(s) { return phisFiles[s]; });
-            var allSlots = ['k', 'z', 'v'].filter(function(s) { return phisFiles[s] || currentFile; });
-            if (allSlots.length === 0) return;
             var reads = hisSlots.map(function(s) { return readFileAsText(phisFiles[s], 'big5'); });
             reads.push(currentFile ? readFileAsText(currentFile, 'big5') : Promise.resolve(''));
             Promise.all(reads).then(function(texts) {
@@ -2956,7 +2829,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 for (var i = 0; i < hisSlots.length; i++) hisLists[hisSlots[i]] = parseFluPersons(texts[i]);
                 var finish = function(famPersons) {
                     famPersons = famPersons || { corona: [], flu: [], lung: [] };
-                    allSlots.forEach(function(s) {
+                    ['k', 'z', 'v'].forEach(function(s) {
                         var merged = (hisLists[s] || []).slice();
                         var seen = {};
                         merged.forEach(function(p) { seen[p.id] = true; });
@@ -2980,7 +2853,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                         slotPersonList[s] = merged;
                     });
                     fluPersonList = slotPersonList.z;
-                    allSlots.forEach(function(s) { renderSlotRows(s); });
+                    renderExport();
                 };
                 var niisText = texts[texts.length - 1];
                 if (!niisText) { finish(null); return; }
@@ -2989,10 +2862,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     .withFailureHandler(function() { finish(null); })
                     .getNiisFamilyPersons(niisText);
             }).catch(function() {
-                ['k', 'z', 'v'].forEach(function(s) {
-                    var b = listBoxOf(s);
-                    if (b) b.innerHTML = '<span style="color:#e74c3c;">名單讀取失敗</span>';
-                });
+                document.getElementById('exportBody').innerHTML =
+                    '<div class="exp-empty-state" style="color:#e74c3c;">名單讀取失敗，請關閉後重試</div>';
             });
         }
 
@@ -3000,9 +2871,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var box = listBoxOf(slot);
             if (!box) return;
             var list = slotPersonList[slot];
-            var sum0 = document.getElementById('expSum_' + slot);
-            if (sum0) sum0.textContent = '名單 ' + list.length + ' 人｜針劑與名單設定　▸ 點擊展開';
-            if (list.length === 0) { box.innerHTML = '<span style="color:#94a3b8;">此類別沒有名單資料（HIS 檔與 NIIS 名單皆無）</span>'; return; }
+            if (list.length === 0) { box.innerHTML = ''; return; }
             var idOpts = slot === 'z' ? fluOptionsHtml('（預設）') : '';
             var batOpts = slotBatchOptionsHtml(slot, '（主選針劑）');
             // v6.2：NIIS 名單的人一律列入（可分配針劑/身分別、一起匯出），名字後標 NIIS 來源
@@ -3140,22 +3009,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             collectExportInputs();
             expOutpost = !expOutpost;
             renderExport();
-        }
-
-        // 手風琴：點容器標題展開/收合（一次只展開一格；點到按鈕/選單不觸發）
-        // 純 class 切換不重繪 DOM（Codex：重繪會清掉手動新增輸入/批次選單/勾選等暫態）
-        function expToggleSec(key, ev) {
-            if (ev && ev.target && ev.target.closest && ev.target.closest('button,select,input,label')) return;
-            expOpenSec = (expOpenSec === key) ? '' : key;
-            var secs = document.querySelectorAll('#exportBody .exp-sec');
-            for (var i = 0; i < secs.length; i++) secs[i].classList.remove('open');
-            if (expOpenSec) {
-                var el = document.querySelector('#exportBody .exp-sec.' + (expOpenSec === 'common' ? 'common' : expOpenSec) + ':not(.empty)');
-                if (el) el.classList.add('open');
-            }
-            // 聚焦模式：有展開格→其他縮成標題列、展開格吃滿全螢幕；無→回 2×2
-            var eb = document.getElementById('exportBody');
-            if (eb) eb.classList.toggle('focus', !!expOpenSec);
         }
 
         // 特殊身分別（個別拉選）人員列 — 列印視窗/一鍵列印附頁/寄信共用
@@ -3301,30 +3154,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return picks;
         }
 
-        function addManualBatch(slot) {
-            collectExportInputs();
-            var t = document.getElementById('expNewType_' + slot).value.trim();
-            var l = document.getElementById('expNewLot_' + slot).value.trim();
-            if (!t || !l) { showModal('疫苗種類代號與批號都要填！'); return; }
-            exportConfig.batches.push({ type: t, lot: l, exp: '', family: SLOT_FAMILY[slot] });
-            exportConfig.lastPick = exportConfig.lastPick || {};
-            exportConfig.lastPick[slot] = t + '|' + l;
-            renderExport();
-        }
-
-        function removeBatch(slot) {
-            collectExportInputs();
-            var sel = document.getElementById('expBatch_' + slot);
-            var idx = parseInt(sel.value, 10);
-            if (!(idx >= 0) || !exportConfig.batches[idx]) { showModal('請先選擇要刪除的針劑！'); return; }
-            var b = exportConfig.batches[idx];
-            showConfirm('刪除針劑', '確定從記憶清單移除「' + b.type + '｜' + b.lot + '」？（同步從試算表移除）', function() {
-                dropBatchAt(idx);
-                persistBatches('已刪除', b.type + '｜' + b.lot);   // v5.9：立即同步，不等儲存
-            }, '🗑️');
-        }
-
-        /* 結存量檔解析（SheetJS 延遲載入） */
+        /* 針劑檔解析（SheetJS 延遲載入） */
         function ensureXLSX() {
             return new Promise(function(resolve, reject) {
                 if (window.XLSX) return resolve();
@@ -3367,15 +3197,14 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return entries;
         }
 
+        // v6.3：主頁「匯入針劑」按鈕（以庫存檔為準同步：新增/保留/已用完刪除）
         function importStockFiles() {
-            var input = document.getElementById('expStockFiles');
+            var input = document.getElementById('mainStockFiles');
             var files = Array.prototype.slice.call(input.files || []);
             input.value = '';   // 允許同檔重新夾帶
             if (files.length === 0) return;
-            collectExportInputs();
-            var msg = document.getElementById('expStockMsg');
-            msg.textContent = '';
-            showFx('loading', '解析結存量檔中', files.length + ' 個檔案…');
+            if (exportModalOpen()) collectExportInputs();
+            showFx('loading', '解析針劑檔中', files.length + ' 個檔案…');
             ensureXLSX().then(function() {
                 return Promise.all(files.map(function(f) {
                     return new Promise(function(resolve) {
@@ -3406,12 +3235,16 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                             res.config._uiDose = (exportConfig || {})._uiDose;
                             exportConfig = res.config;
                             lastImportDetail = res;
-                            renderExport();
-                            var noteParts = ['加入 ' + res.added + ' 筆', '更新 ' + res.updated + ' 筆'];
-                            if (res.unchanged) noteParts.push('無變動 ' + res.unchanged + ' 筆');
+                            renderMainBatches();
+                            if (exportModalOpen()) renderExport();
+                            var noteParts = ['新增 ' + res.added + ' 筆', '保留 ' + (res.kept || 0) + ' 筆'];
+                            if (res.removed) noteParts.push('已用完刪除 ' + res.removed + ' 筆');
                             if (res.skippedOther) noteParts.push('略過非目標 ' + res.skippedOther + ' 筆');
-                            showFx('success', '針劑解析完成', noteParts.join('、') +
-                                (res.sheetOk ? '（已存入試算表「針劑記憶」）' : '（已存雲端）'), 2600);
+                            showFx('success', '針劑同步完成', noteParts.join('、') +
+                                (res.sheetOk ? '（已存入試算表「針劑記憶」）' : '（已存雲端）'), 2800);
+                        } else if (res && res.noChange) {
+                            // 防呆擋下（檔內零筆目標疫苗／超過上限）：記憶完全未動
+                            showFx('error', '未匯入（記憶未變更）', res.error, 5000);
                         } else {
                             showFx('error', '匯入失敗', (res && res.error) || '未知錯誤', 3600);
                         }
@@ -3421,31 +3254,25 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     })
                     .importNiisBatches(entries, exportConfig);
             }).catch(function(err) {
-                msg.textContent = '';
                 showFx('error', '解析失敗', String(err && err.message || err), 3600);
             });
         }
 
-        function saveExportConfigOnly() {
-            collectExportInputs();
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res && res.success) {
-                        res.config._uiDateIso = (exportConfig || {})._uiDateIso;
-                        res.config._uiDose = (exportConfig || {})._uiDose;
-                        exportConfig = res.config;
-                        showFx('success', '設定已儲存', res.sheetOk
-                            ? '偏好已存雲端；針劑清單在試算表「針劑記憶」（全所共用）'
-                            : '針劑清單與代號已存雲端（全所共用）', 2200);
-                    } else showFx('error', '儲存失敗', (res && res.error) || '未知錯誤', 3200);
-                })
-                .withFailureHandler(function(err) { showFx('error', '儲存失敗', String(err), 3200); })
-                .saveNiisExportConfig(exportConfig);
-        }
-
-        /* ===== 齒輪：身分別自動判讀設定（v5.2 分域：covid=新冠容器、flu=流感容器） ===== */
+        /* ===== 身分別自動判讀設定（v6.3：入口移至主頁 ⚙ 疫苗辨識設定；分域 covid/flu） ===== */
         function openRuleSettings(scope) {
-            collectExportInputs();
+            if (exportModalOpen()) collectExportInputs();
+            if (!exportConfig || !exportConfig.covidTable) {
+                showFx('loading', '載入設定中', '');
+                google.script.run
+                    .withSuccessHandler(function(cfg) {
+                        exportConfig = cfg;
+                        hideFx();
+                        openRuleSettings(scope);
+                    })
+                    .withFailureHandler(function(err) { showFx('error', '無法載入設定', String(err), 3200); })
+                    .getNiisExportConfig();
+                return;
+            }
             if (scope) window._ruleScope = scope;
             var sc = window._ruleScope || 'flu';
             var hEl = document.querySelector('#ruleModal .custom-modal-header h2');
@@ -3560,7 +3387,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     if (res && res.success) {
                         exportConfig = res.config;
                         closeRuleSettings();
-                        renderExport();   // 門檻/代號變動 → 重新判讀紅底與預設
+                        if (exportModalOpen()) renderExport();   // 門檻/代號變動 → 重新判讀紅底與預設
                         refreshMainListBadges();
                         showFx('success', '自動判讀設定已儲存', '已存雲端（全所共用）', 2200);
                     } else {
@@ -4277,10 +4104,14 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             if (cb) cb();
         }
 
-        /* ===== 開頁預載產檔設定（主頁浮標「目前身分別」動態計算用） ===== */
+        /* ===== 開頁預載產檔設定（主頁針劑一覽＋浮標「目前身分別」動態計算用） ===== */
         if (window.google && google.script && google.script.run) {
             google.script.run
-                .withSuccessHandler(function(cfg) { if (cfg) exportConfig = cfg; refreshMainListBadges(); })
+                .withSuccessHandler(function(cfg) {
+                    if (cfg) exportConfig = cfg;
+                    renderMainBatches();      // v6.3：主頁顯示目前針劑（過期已於後端自動清除）
+                    refreshMainListBadges();
+                })
                 .withFailureHandler(function() {})
                 .getNiisExportConfig();
         }
