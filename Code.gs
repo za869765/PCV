@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v5.8)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v5.9)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -102,6 +102,10 @@
  *  ⚠ 貼回部署後首次執行需重新授權（新增試算表權限）
  * v5.8 變更（前端）：匯入後「本次匯入明細」預設展開（details open）；
  *  結果卡明寫「免按儲存設定」（匯入即自動存，使用者兩度詢問故直接標示）
+ * v5.9 變更：匯入分流「更新（效期有變）」vs「已存在無變動」（重複匯入同檔
+ *  不再顯示更新 N 筆造成誤會）；縮小容器標題列顯示類別摘要（種類代號×數量，
+ *  展開時隱藏改看小卡）；小卡 ✕ 即時刪除＋共用格「🧹 清除已過期」一鍵刪
+ *  效期早於接種日期的針劑（皆先確認、立即同步試算表；舊「刪除」鈕也改即時同步）
  */
 
 function doGet() {
@@ -725,8 +729,8 @@ function importNiisBatches(entries, currentCfg) {
     var byKey = {};
     for (var i = 0; i < cfg.batches.length; i++) byKey[cfg.batches[i].type + '|' + cfg.batches[i].lot] = cfg.batches[i];
 
-    var added = 0, updated = 0, skippedOther = 0;
-    var addedList = [], updatedList = [], skippedMap = {};
+    var added = 0, updated = 0, unchanged = 0, skippedOther = 0;
+    var addedList = [], updatedList = [], unchangedList = [], skippedMap = {};
     entries = entries || [];
     // v5.6：庫存量查詢檔含全部疫苗（BCG/MMR…）——辨識不出三類別者略過不存，
     // 否則 family 空值會出現在全部下拉選單（選單過濾放行空 family）；
@@ -751,10 +755,12 @@ function importNiisBatches(entries, currentCfg) {
           skippedMap[t] = (skippedMap[t] || 0) + 1;
           continue;
         }
-        if (!ex.family) ex.family = fam;   // 舊污染補上類別
-        if (exp) ex.exp = exp;
-        updated++;
-        updatedList.push({ type: t, lot: l });
+        // v5.9：真的有變才算「更新」，否則回報「已存在無變動」（重複匯入不再誤導）
+        var changed = false;
+        if (!ex.family) { ex.family = fam; changed = true; }   // 舊污染補上類別
+        if (exp && exp !== ex.exp) { ex.exp = exp; changed = true; }
+        if (changed) { updated++; updatedList.push({ type: t, lot: l }); }
+        else { unchanged++; unchangedList.push({ type: t, lot: l }); }
       } else {
         if (!fam) {
           skippedOther++;
@@ -773,8 +779,9 @@ function importNiisBatches(entries, currentCfg) {
     if (!saved.success) return saved;
     var skippedList = [];
     for (var sk in skippedMap) skippedList.push({ type: sk, count: skippedMap[sk] });
-    return { success: true, config: saved.config, added: added, updated: updated, skippedOther: skippedOther,
-             addedList: addedList, updatedList: updatedList, skippedList: skippedList, sheetOk: saved.sheetOk };
+    return { success: true, config: saved.config, added: added, updated: updated, unchanged: unchanged,
+             skippedOther: skippedOther, addedList: addedList, updatedList: updatedList,
+             unchangedList: unchangedList, skippedList: skippedList, sheetOk: saved.sheetOk };
   } catch (error) {
     return { success: false, error: error.toString() };
   }
