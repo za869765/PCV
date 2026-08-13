@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.1)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.2)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -108,6 +108,12 @@
  *  效期早於接種日期的針劑（皆先確認、立即同步試算表；舊「刪除」鈕也改即時同步）
  * v6.1 變更（前端；版號不跨10：v5.9→v6.1）：目前記憶針劑小卡依效期
  *  「舊→新」排序（舊的排最前、旁邊就是✕，不用在選單翻找；無效期排最後）
+ * v6.2 變更（使用者定案「一律列入」）：NIIS 名單的人也進容器分配針劑/身分別
+ *  並一起匯出——容器名單＝HIS 檔 ∪ NIIS 名單（去重、同人 HIS 欄位優先、NIIS 補齊；
+ *  名字標 NIIS 來源），只有 NIIS 名單沒 HIS 的日子照常運作；
+ *  「已在 NIIS 自動略過」灰階與 skipped 概念移除；流感身分別優先序＝
+ *  個別拉選＞NIIS 檔內身分別＞門檻預設；analyzeNIIS 加抓性別/地址/電話/劑次；
+ *  新增 getNiisFamilyPersons 供前端名單合併
  */
 
 function doGet() {
@@ -305,13 +311,19 @@ function analyzeNIIS(jnContent, config) {
   var unrecognized = [];      // 無法辨識的資料列 [{name, type}]
 
   // 身份別欄（流感 F 對象別代碼）：表頭含「身份別／身分別」
-  var identityCol = -1;
+  // v6.2：加抓 性別/地址/電話/劑次 欄（NIIS 名單的人也要能匯出，欄位齊全）
+  var identityCol = -1, sexCol = -1, addrCol = -1, phoneCol = -1, doseCol = -1;
   var header0 = rows[0] || [];
   for (var hc = 0; hc < header0.length; hc++) {
     var hv = String(header0[hc] || '');
-    if (hv.indexOf('身份別') !== -1 || hv.indexOf('身分別') !== -1) { identityCol = hc; break; }
+    if (identityCol === -1 && (hv.indexOf('身份別') !== -1 || hv.indexOf('身分別') !== -1)) identityCol = hc;
+    if (sexCol === -1 && hv.indexOf('性別') !== -1) sexCol = hc;
+    if (addrCol === -1 && (hv.indexOf('地址') !== -1 || hv.indexOf('住址') !== -1)) addrCol = hc;
+    if (phoneCol === -1 && hv.indexOf('電話') !== -1) phoneCol = hc;
+    if (doseCol === -1 && (hv.indexOf('劑次') !== -1 || hv.indexOf('劑別') !== -1)) doseCol = hc;
   }
   var idFCodeMap = {};        // 流感受種者 id -> F 對象別代碼
+  var idSexMap = {}, idAddrMap = {}, idPhoneMap = {}, idDoseMap = {};
 
   for (var i = 1; i < rows.length; i++) {
     var row = rows[i];
@@ -325,6 +337,12 @@ function analyzeNIIS(jnContent, config) {
     if (id && birthCol >= 0 && !idBirthMap[id]) {
       var birth = (row[birthCol] || '').toString().trim();
       if (birth) idBirthMap[id] = birth;
+    }
+    if (id) {
+      if (sexCol >= 0 && !idSexMap[id]) idSexMap[id] = (row[sexCol] || '').toString().trim();
+      if (addrCol >= 0 && !idAddrMap[id]) idAddrMap[id] = (row[addrCol] || '').toString().trim();
+      if (phoneCol >= 0 && !idPhoneMap[id]) idPhoneMap[id] = (row[phoneCol] || '').toString().trim();
+      if (doseCol >= 0 && !idDoseMap[id]) idDoseMap[id] = (row[doseCol] || '').toString().trim();
     }
 
     var cat = recognizeVaccineCategory(raw, config);
@@ -355,8 +373,55 @@ function analyzeNIIS(jnContent, config) {
     idCategoryCount: idCategoryCount,
     unrecognized: unrecognized,
     idFCodeMap: idFCodeMap,
-    hasIdentityCol: identityCol >= 0
+    hasIdentityCol: identityCol >= 0,
+    idSexMap: idSexMap, idAddrMap: idAddrMap, idPhoneMap: idPhoneMap, idDoseMap: idDoseMap
   };
+}
+
+// v6.2：NIIS 名單各類別的人（含名單欄位）——供前端容器名單與匯出合併用
+function niisPersonsByFam_(jnContent, config, keyFam) {
+  var out = { corona: {}, flu: {}, lung: {} };   // fam -> id -> 欄位
+  if (!jnContent) return out;
+  var data = analyzeNIIS(jnContent, config);
+  for (var id in data.idCategoryCount) {
+    for (var k in data.idCategoryCount[id]) {
+      var fam = keyFam[k];
+      if (!fam || !out[fam] || out[fam][id]) continue;
+      out[fam][id] = {
+        name: data.idNameMap[id] || '',
+        birth: data.idBirthMap[id] || '',
+        sex: (data.idSexMap || {})[id] || '',
+        addr: (data.idAddrMap || {})[id] || '',
+        phone: (data.idPhoneMap || {})[id] || '',
+        dose: (data.idDoseMap || {})[id] || '',
+        fcode: (data.idFCodeMap || {})[id] || ''
+      };
+    }
+  }
+  return out;
+}
+
+// 前端容器名單用：NIIS 名單各類別的人（陣列、依姓名排序）
+function getNiisFamilyPersons(jnContent) {
+  try {
+    var config = getVaccineConfigList();
+    var keyFam = {};
+    for (var g = 0; g < config.length; g++) keyFam[config[g].key] = config[g].family;
+    var byFam = niisPersonsByFam_(jnContent, config, keyFam);
+    var out = {};
+    ['corona', 'flu', 'lung'].forEach(function(fam) {
+      var arr = [];
+      for (var id in byFam[fam]) {
+        var p = byFam[fam][id];
+        arr.push({ id: id, name: p.name || id, birth: p.birth, sex: p.sex, fcode: p.fcode });
+      }
+      arr.sort(function(a, b) { return a.name.localeCompare(b.name, 'zh-Hant'); });
+      out[fam] = arr;
+    });
+    return out;
+  } catch (e) {
+    return { corona: [], flu: [], lung: [] };
+  }
 }
 
 // HIS 檔上傳槽定義（compareCSVFiles 加計與 buildNiisExport 共用）
@@ -878,9 +943,11 @@ function fluMinAge(vacRoc, fluRule) {
 }
 
 /**
- * 產 NIIS 匯入檔：HIS 檔中 NIIS 名單沒有的人 → 媒體上傳格式 CSV（Big5）
- * picks = { slots: { k/z/v: { type, lot, dose } }, idCodes: { corona, flu }, org, date }
- * 身分別：HIS 檔內「NIIS身分別」值優先，否則新冠/流感用預設代號；肺鏈不填。
+ * 產 NIIS 匯入檔 → 媒體上傳格式 CSV（Big5）
+ * v6.2 起：HIS 檔的人 ∪ NIIS 名單的人「一律列入」（同人去重、HIS 欄位優先）；
+ * 只有 NIIS 名單（沒夾 HIS）的日子也能分配針劑/身分別並產檔。
+ * picks = { slots: { k/z/v: { type, lot, dose } }, fluCodes, personBatch, org, date, outpost, rules }
+ * 身分別：新冠依年齡；流感=個別拉選＞NIIS檔內身分別＞門檻預設；肺鏈不填。
  */
 function buildNiisExport(phisFiles, jnContent, picks) {
   try {
@@ -905,36 +972,40 @@ function buildNiisExport(phisFiles, jnContent, picks) {
     var keyFam = {};
     for (var g = 0; g < config.length; g++) keyFam[config[g].key] = config[g].family;
 
-    // NIIS 名單各類別集合（已在 NIIS 的人不匯出）
-    var niisFam = { corona: {}, flu: {}, lung: {} };
-    if (jnContent) {
-      var data = analyzeNIIS(jnContent, config);
-      for (var nid in data.idCategoryCount) {
-        for (var nk in data.idCategoryCount[nid]) {
-          var fam = keyFam[nk];
-          if (fam) niisFam[fam][nid] = true;
-        }
-      }
-    }
+    // v6.2：NIIS 名單的人一律列入匯出（與 HIS 合併去重；同人以 HIS 欄位優先、NIIS 補齊）
+    var niisP = niisPersonsByFam_(jnContent, config, keyFam);
 
     var lines = [NIIS_EXPORT_HEADER];
-    var count = 0, skipped = 0;
+    var count = 0;
     var exported = [];   // {name, slot} 供前端顯示
+    var EMPTY_PARSE = { idNameMap: {}, idBirthMap: {}, idIdentMap: {}, idSexMap: {}, idPhoneMap: {},
+                        idAddrMap: {}, idDoseMap: {}, typeValues: {}, hasTypeCol: false };
     for (var s = 0; s < PHIS_SLOTS.length; s++) {
       var def = PHIS_SLOTS[s];
       var content = phisFiles[def.slot];
-      if (!content) continue;
-      var parsed = parsePhisList(content);
-      if (parsed.hasTypeCol) {
+      var famNiis = niisP[def.family] || {};
+      var famNiisIds = Object.keys(famNiis);
+      if (!content && famNiisIds.length === 0) continue;
+      var parsed = content ? parsePhisList(content) : EMPTY_PARSE;
+      if (content && parsed.hasTypeCol) {
         for (var tvk in parsed.typeValues) {
           if (tvk !== def.expect) {
             return { errorMessage: 'HIS ' + def.expect + ' 檔案錯誤：優待別欄出現「' + parsed.typeValues[tvk] + '」！' };
           }
         }
       }
-      var ids = Object.keys(parsed.idNameMap).sort(function(a, b) {
-        return (parsed.idNameMap[a] || '').localeCompare(parsed.idNameMap[b] || '', 'zh-Hant');
-      });
+      // 名單＝HIS 的人 ∪ NIIS 名單該類別的人（去重）
+      var ids = Object.keys(parsed.idNameMap);
+      for (var na = 0; na < famNiisIds.length; na++) {
+        if (!parsed.idNameMap[famNiisIds[na]]) ids.push(famNiisIds[na]);
+      }
+      // HIS 解析姓名缺值時會以身分證代填——此時改用 NIIS 名單姓名補齊
+      var nameOf = function(pid) {
+        var hn = parsed.idNameMap[pid];
+        if (hn && hn !== pid) return hn;
+        return (famNiis[pid] || {}).name || hn || pid;
+      };
+      ids.sort(function(a, b) { return nameOf(a).localeCompare(nameOf(b), 'zh-Hant'); });
       var pick = slotPicks[def.slot] || {};
       var slotDose = String(pick.dose || '').trim();
       var slotPB = personBatch[def.slot] || {};
@@ -944,7 +1015,8 @@ function buildNiisExport(phisFiles, jnContent, picks) {
       var noBatch = [];      // 個別與主選針劑皆無（擋下列名）
       for (var i = 0; i < ids.length; i++) {
         var pid = ids[i];
-        if (niisFam[def.family][pid]) { skipped++; continue; }
+        var np = famNiis[pid] || {};
+        var pBirthRaw = parsed.idBirthMap[pid] || np.birth || '';
         // 針劑：個別拉選優先，否則用該檔主選；匯出前字元防呆＋官方大小寫正典化
         var pType = pick.type || '';
         var pLot = pick.lot || '';
@@ -954,34 +1026,36 @@ function buildNiisExport(phisFiles, jnContent, picks) {
         }
         pType = canonType(pType);
         pLot = cleanCodeStr(pLot);
-        if (!pType || !pLot) noBatch.push(parsed.idNameMap[pid] || pid);
+        if (!pType || !pLot) noBatch.push(nameOf(pid));
         var identity = '';
         if (def.family === 'corona') {
           // 新冠：一律依年齡自動判斷（只看出生年，對照表可設定）
-          identity = covidIdentityByAge(parsed.idBirthMap[pid], date, covidTable);
-          if (!identity) noBirth.push(parsed.idNameMap[pid] || pid);
+          identity = covidIdentityByAge(pBirthRaw, date, covidTable);
+          if (!identity) noBirth.push(nameOf(pid));
         } else if (def.family === 'flu') {
-          // 流感：個別拉選優先；未拉選者需符合公費門檻才帶預設（所內/外設）
+          // 流感：個別拉選優先 > NIIS 名單檔內身分別 > 符合公費門檻帶預設（所內/外設）
           if (fluCodes[pid]) {
             identity = fluCodes[pid];
+          } else if (np.fcode) {
+            identity = np.fcode;
           } else {
-            var fAge = ageByYear(parsed.idBirthMap[pid], date);
+            var fAge = ageByYear(pBirthRaw, date);
             if (fAge != null && fAge >= minAge) identity = fluDefault;
-            else fluBad.push((parsed.idNameMap[pid] || pid) + (fAge != null ? '（' + fAge + ' 歲）' : '（缺出生）'));
+            else fluBad.push(nameOf(pid) + (fAge != null ? '（' + fAge + ' 歲）' : '（缺出生）'));
           }
         }
         // 肺鏈不填身分別
-        var sex = parsed.idSexMap[pid] || '';
+        var sex = parsed.idSexMap[pid] || np.sex || '';
         sex = sex.indexOf('男') !== -1 ? 'M' : (sex.indexOf('女') !== -1 ? 'F' : sex);
-        var birth = (parsed.idBirthMap[pid] || '').replace(/^0+/, '');   // 民國前置 0 去除（0480327→480327）
-        var dose = String(parsed.idDoseMap[pid] || '').trim() || slotDose || '1';
+        var birth = String(pBirthRaw).replace(/^0+/, '');   // 民國前置 0 去除（0480327→480327）
+        var dose = String(parsed.idDoseMap[pid] || '').trim() || String(np.dose || '').trim() || slotDose || '1';
         slotRows.push([
-          pid, parsed.idNameMap[pid] || '', sex, birth, '1',
-          parsed.idAddrMap[pid] || '', parsed.idPhoneMap[pid] || '', '',
+          pid, nameOf(pid), sex, birth, '1',
+          parsed.idAddrMap[pid] || np.addr || '', parsed.idPhoneMap[pid] || np.phone || '', '',
           org, date, pType, dose, pLot, '', '1', '',
           identity, '', '', '', '', '', '', ''
         ]);
-        exported.push({ name: parsed.idNameMap[pid] || pid, slot: def.expect });
+        exported.push({ name: nameOf(pid), slot: def.expect });
       }
       if (noBirth.length > 0) {
         return { errorMessage: '新冠名單缺出生日期，無法依年齡判斷身分別，請修正 HIS 檔：' + noBirth.join('、') };
@@ -1005,9 +1079,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
     }
 
     if (count === 0) {
-      return { errorMessage: skipped > 0
-        ? 'HIS 檔中 ' + skipped + ' 人都已在 NIIS 名單，沒有需要匯入的人！'
-        : 'HIS 檔中沒有可匯出的資料！' };
+      return { errorMessage: '沒有可匯出的資料（HIS 檔與 NIIS 名單皆無名單）！' };
     }
 
     var csv = lines.join('\r\n') + '\r\n';
@@ -1017,7 +1089,6 @@ function buildNiisExport(phisFiles, jnContent, picks) {
       fileName: fileName,
       base64: Utilities.base64Encode(blob.getBytes()),
       count: count,
-      skipped: skipped,
       exported: exported
     };
   } catch (error) {
