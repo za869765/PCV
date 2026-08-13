@@ -1414,6 +1414,12 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     font-weight: 600;
 }
 
+.chips-order {
+    font-style: normal;
+    font-weight: 400;
+    color: #b0b8c4;
+}
+
 .batch-chips-none {
     font-size: 12px;
     color: #b0b8c4;
@@ -2181,7 +2187,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v5.9</div>
+    <div class="version-tag">v6.1</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2612,17 +2618,26 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         }
 
         // 各容器「目前記憶針劑」小卡（含佔位容器也顯示；效期早於接種日→紅標；✕可刪）
+        // v6.1：依效期「舊→新」排序——舊的排最前面，順手就能刪，不用在選單裡翻找
         function famChipsHtml(fam) {
-            var chips = '';
+            var list = [];
             ((exportConfig && exportConfig.batches) || []).forEach(function(b, bi) {
-                if (b.family !== fam) return;
+                if (b.family === fam) list.push({ b: b, bi: bi });
+            });
+            list.sort(function(x, y) {
+                function expNum(e) { var n = parseInt(String(e == null ? '' : e).replace(/\D/g, ''), 10); return isNaN(n) ? Infinity : n; }
+                return expNum(x.b.exp) - expNum(y.b.exp);   // 無效期排最後
+            });
+            var chips = '';
+            list.forEach(function(it) {
+                var b = it.b;
                 var bad = isExpiredRoc(b.exp);
                 chips += '<span class="batch-chip' + (bad ? ' expired' : '') + '" data-exp="' + escAttr(b.exp || '') +
-                    '" data-tip="記憶中的針劑（存於試算表「針劑記憶」）&#10;效期早於接種日期會紅色標示">' +
+                    '" data-tip="記憶中的針劑（存於試算表「針劑記憶」）&#10;效期早於接種日期會紅色標示&#10;列表依效期舊→新排序">' +
                     escAttr(b.type) + '｜' + escAttr(b.lot) + (b.exp ? '<i>效期 ' + escAttr(b.exp) + '</i>' : '') +
-                    '<b class="chip-x" data-tip="從記憶與試算表移除此針劑" onclick="removeChipBatch(event,' + bi + ')">✕</b></span>';
+                    '<b class="chip-x" data-tip="從記憶與試算表移除此針劑" onclick="removeChipBatch(event,' + it.bi + ')">✕</b></span>';
             });
-            return '<div class="batch-chips"><span class="batch-chips-cap">目前記憶針劑</span>' +
+            return '<div class="batch-chips"><span class="batch-chips-cap">目前記憶針劑<i class="chips-order">（舊→新）</i></span>' +
                 (chips || '<span class="batch-chips-none">尚無——夾帶庫存量檔或手動新增</span>') + '</div>';
         }
 
