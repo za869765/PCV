@@ -1395,9 +1395,79 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     padding: 2px 0 4px;
 }
 
-#exportBody .exp-sec:not(.open) > *:not(.exp-sec-title):not(.exp-sum) {
+#exportBody .exp-sec:not(.open) > *:not(.exp-sec-title):not(.exp-sum):not(.batch-chips) {
     display: none;
 }
+
+/* 目前記憶針劑小卡（v5.7）：收合時也顯示；聚焦模式下未展開格只剩標題 */
+.batch-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin: 2px 0 8px;
+}
+
+.batch-chips-cap {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.batch-chips-none {
+    font-size: 12px;
+    color: #b0b8c4;
+}
+
+.batch-chip {
+    font-size: 12.5px;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    color: #3730a3;
+    border-radius: 999px;
+    padding: 3px 10px;
+}
+
+.batch-chip i {
+    font-style: normal;
+    color: #64748b;
+    margin-left: 6px;
+    font-size: 11.5px;
+}
+
+.batch-chip.expired {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+    animation: chipPulse 1.6s ease-in-out infinite;
+}
+
+.batch-chip.expired i { color: #dc2626; }
+.batch-chip.expired::before { content: '⚠ '; }
+
+@keyframes chipPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.28); }
+    50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, 0); }
+}
+
+#exportBody.focus .exp-sec:not(.open) .batch-chips {
+    display: none;   /* 聚焦時未展開格只剩標題列 */
+}
+
+/* 匯入結果明細（v5.7） */
+.imp-detail {
+    font-size: 12.5px;
+    color: #166534;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 2px 0 10px;
+}
+
+.imp-detail details { margin-top: 4px; color: #334155; }
+.imp-detail summary { cursor: pointer; color: #2563eb; font-weight: 600; }
+.imp-detail details div { margin-top: 4px; line-height: 1.55; word-break: break-all; }
 
 #exportBody .exp-sec.open .exp-sum {
     display: none;
@@ -2035,7 +2105,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             </div>
             <div class="custom-modal-footer">
                 <button class="modal-btn modal-btn-secondary" onclick="closeExport()">取消</button>
-                <button class="modal-btn modal-btn-secondary" data-tip="只儲存針劑/代號/機構設定&#10;不產生檔案" onclick="saveExportConfigOnly()">儲存設定</button>
+                <button class="modal-btn modal-btn-secondary" data-tip="防呆提醒：針劑匯入當下已自動存入試算表&#10;此鈕只存「批次拉選/劑別/日期」等偏好&#10;（按產生並下載時也會自動存，平常可不按）" onclick="saveExportConfigOnly()">儲存設定</button>
                 <button class="modal-btn modal-btn-primary" data-tip="產生媒體資料上傳檔（Big5 CSV）並下載&#10;同時儲存目前設定供下次使用" onclick="generateNiisFile()">產生並下載</button>
             </div>
         </div>
@@ -2087,7 +2157,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v5.6</div>
+    <div class="version-tag">v5.7</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2250,6 +2320,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         /* ===== 產 NIIS 匯入檔（v3.7） ===== */
         var exportConfig = null;
+        var lastImportDetail = null;   // 本次匯入結果明細（v5.7；重繪保留）
         var SLOT_FAMILY = { k: 'corona', z: 'flu', v: 'lung' };
 
         // 附件14 流感疫苗接種計畫接種對象代碼對照表
@@ -2425,6 +2496,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             updateDateRoc();
             updateFluRowStates();      // 月份變動會改變公費門檻
             refreshMainListBadges();   // 主頁醒目提示同步
+            refreshExpiryMarks();      // 針劑效期⚠／紅標同步（原地刷新不重繪）
         }
 
         function openExport() {
@@ -2452,10 +2524,78 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         }
 
         function batchLabel(b) {
-            var extra = [];
-            if (b.exp) extra.push('效期 ' + b.exp);
-            if (b.qty !== '' && b.qty != null) extra.push('存 ' + b.qty);
-            return b.type + '｜' + b.lot + (extra.length ? '（' + extra.join('・') + '）' : '');
+            return b.type + '｜' + b.lot + (b.exp ? '（效期 ' + b.exp + '）' : '');
+        }
+
+        // ===== 效期防呆（v5.7）：針劑效期早於接種日期 → 選單⚠＋小卡紅標 =====
+        function currentRocInt() {
+            var iso = (document.getElementById('expDate') || {}).value ||
+                (exportConfig && exportConfig._uiDateIso) || defaultThursdayISO();
+            var n = parseInt(isoToRoc(iso), 10);
+            return isNaN(n) ? null : n;
+        }
+
+        function isExpiredRoc(exp) {
+            var e = parseInt(String(exp == null ? '' : exp).replace(/\D/g, ''), 10);
+            var c = currentRocInt();
+            return !!(e && c && String(e).length >= 6 && e < c);
+        }
+
+        function batchOptionLabel(b) {
+            return (isExpiredRoc(b.exp) ? '⚠ ' : '') + batchLabel(b);
+        }
+
+        // 接種日期變動時原地刷新⚠與紅標（不重繪，暫態輸入不流失）
+        function refreshExpiryMarks() {
+            if (!exportConfig) return;
+            var body = document.getElementById('exportBody');
+            if (!body) return;
+            var sels = body.querySelectorAll('select');
+            for (var s = 0; s < sels.length; s++) {
+                var opts = sels[s].options;
+                for (var o = 0; o < opts.length; o++) {
+                    if (!/^\d+$/.test(opts[o].value)) continue;   // 批次選單的值＝批次索引；F代碼選單不會命中
+                    var b = exportConfig.batches[parseInt(opts[o].value, 10)];
+                    if (b) opts[o].textContent = batchOptionLabel(b);
+                }
+            }
+            var chips = body.querySelectorAll('.batch-chip');
+            for (var c2 = 0; c2 < chips.length; c2++) {
+                chips[c2].classList.toggle('expired', isExpiredRoc(chips[c2].getAttribute('data-exp')));
+            }
+        }
+
+        // 匯入結果明細（共用格；<details> 可展開加入/更新/略過清單）
+        function importDetailHtml() {
+            var d = lastImportDetail;
+            if (!d) return '';
+            var h = '<div class="imp-detail"><div>✔ 加入 ' + d.added + ' 筆、更新 ' + d.updated + ' 筆' +
+                (d.skippedOther ? '、略過非目標疫苗 ' + d.skippedOther + ' 筆' : '') +
+                (d.sheetOk ? '——已存入試算表「針劑記憶」，可直接開表檢視/修改' : '——已存雲端') + '</div>';
+            function items(list) {
+                return list.map(function(x) { return escAttr(x.type) + '｜' + escAttr(x.lot); }).join('、');
+            }
+            var rows = '';
+            if (d.addedList && d.addedList.length) rows += '<div><b>加入：</b>' + items(d.addedList) + '</div>';
+            if (d.updatedList && d.updatedList.length) rows += '<div><b>更新：</b>' + items(d.updatedList) + '</div>';
+            if (d.skippedList && d.skippedList.length) rows += '<div><b>略過（非新冠/流感/肺鏈，不干預）：</b>' +
+                d.skippedList.map(function(x) { return escAttr(x.type) + (x.count > 1 ? '×' + x.count : ''); }).join('、') + '</div>';
+            if (rows) h += '<details><summary>本次匯入明細</summary>' + rows + '</details>';
+            return h + '</div>';
+        }
+
+        // 各容器「目前記憶針劑」小卡（含佔位容器也顯示；效期早於接種日→紅標）
+        function famChipsHtml(fam) {
+            var chips = '';
+            ((exportConfig && exportConfig.batches) || []).forEach(function(b) {
+                if (b.family !== fam) return;
+                var bad = isExpiredRoc(b.exp);
+                chips += '<span class="batch-chip' + (bad ? ' expired' : '') + '" data-exp="' + escAttr(b.exp || '') +
+                    '" data-tip="記憶中的針劑（存於試算表「針劑記憶」）&#10;效期早於接種日期會紅色標示">' +
+                    escAttr(b.type) + '｜' + escAttr(b.lot) + (b.exp ? '<i>效期 ' + escAttr(b.exp) + '</i>' : '') + '</span>';
+            });
+            return '<div class="batch-chips"><span class="batch-chips-cap">目前記憶針劑</span>' +
+                (chips || '<span class="batch-chips-none">尚無——夾帶庫存量檔或手動新增</span>') + '</div>';
         }
 
         function fluOptionsHtml(defaultLabel) {
@@ -2494,8 +2634,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             html += '<div class="exp-sec common' + (expOpenSec === 'common' ? ' open' : '') + '">';
             html += '<div class="exp-sec-title" onclick="expToggleSec(\'common\', event)"><span class="exp-caret">▸</span>📁 檔案與共用設定</div>';
             html += '<div class="exp-sum" id="expSum_common">機構 ' + escAttr(cfg.org || '2341050013') + '｜接種日 民國 ' + escAttr(isoToRoc(cfg._uiDateIso || defaultThursdayISO()) || '—') + '｜針劑匯入・日期設定　▸ 點擊展開</div>';
-            html += '<div class="exp-drop" data-tip="NIIS 匯出的結存量檔（.xls）或&#10;庫存量查詢檔（.xlsx）皆可&#10;可一次多選，夾帶後自動解析&#10;針劑自動歸類並存雲端記憶"><input type="file" id="expStockFiles" accept=".xls,.xlsx,.csv" multiple onchange="importStockFiles()"><span>📎 夾帶結存量／庫存量檔（可多選，夾帶後自動解析）</span></div>';
-            html += '<div id="expStockMsg" style="font-size:12.5px;color:#27ae60;margin:6px 0 10px;"></div>';
+            html += '<div class="exp-drop" data-tip="NIIS 匯出的結存量檔（.xls）或&#10;庫存量查詢檔（.xlsx）皆可&#10;可一次多選，夾帶後自動解析&#10;針劑自動歸類並存入試算表「針劑記憶」&#10;（免按儲存，匯入即存）"><input type="file" id="expStockFiles" accept=".xls,.xlsx,.csv" multiple onchange="importStockFiles()"><span>📎 夾帶結存量／庫存量檔（可多選，夾帶後自動解析）</span></div>';
+            html += '<div id="expStockMsg" style="font-size:12.5px;color:#c0392b;margin:6px 0 4px;"></div>';
+            html += importDetailHtml();
             html += '<div class="settings-row-head" style="align-items:flex-end;margin-bottom:0;">';
             html += '<div class="s-field" data-tip="固定值（佳里區衛生所），僅檢視"><span class="s-cap">接種機構代碼</span><div style="font-weight:600;padding:7px 2px;">' + escAttr(cfg.org || '2341050013') + '</div></div>';
             html += '<div class="s-field" data-tip="預設＝今天或過去最近的禮拜四&#10;（當天是週四即押當天）&#10;月份會影響流感公費門檻判斷"><span class="s-cap">接種日期</span><input type="date" class="s-input" id="expDate" value="' + escAttr(cfg._uiDateIso || defaultThursdayISO()) + '" onchange="onDateChanged()"></div>';
@@ -2517,7 +2658,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 };
                 if (!phisFiles[slot]) {
                     html += '<div class="exp-sec ' + slot + ' empty"><div class="exp-sec-title" style="cursor:default;">' + sec.icon + ' ' + sec.title + gearOf(true) + '</div>';
-                    html += '<div class="exp-sum">未夾帶 ' + PHIS_META[slot].expect + ' 掛號檔（回主頁夾帶後即出現名單）</div></div>';
+                    html += '<div class="exp-sum">未夾帶 ' + PHIS_META[slot].expect + ' 掛號檔（回主頁夾帶後即出現名單）</div>';
+                    html += famChipsHtml(SLOT_FAMILY[slot]);   // 沒名單也看得到目前記憶針劑
+                    html += '</div>';
                     continue;
                 }
                 var fam = SLOT_FAMILY[slot];
@@ -2535,6 +2678,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 }
                 html += '</div>';
                 html += '<div class="exp-sum" id="expSum_' + slot + '">' + (slotPersonList[slot].length ? '名單 ' + slotPersonList[slot].length + ' 人｜' : '') + '針劑與名單設定　▸ 點擊展開</div>';
+                html += famChipsHtml(fam);   // 目前記憶針劑一覽（收合時也顯示）
                 if (sec.note) html += '<div style="font-size:12.5px;color:#7f8c8d;margin:-4px 0 8px;">' + sec.note + '</div>';
                 html += '<div class="settings-row-head" style="align-items:flex-end;">';
                 html += '<div class="s-field s-field-grow" data-tip="批次拉選：從記憶的針劑清單選擇&#10;（結存量匯入或手動新增皆會列入）"><span class="s-cap">針劑（疫苗種類｜批號）</span>';
@@ -2548,7 +2692,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     candidates++;
                     if (onlyIdx === -1) onlyIdx = bi;
                     if (b.type + '|' + b.lot === lastKey) lastIdx = bi;
-                    html += '<option value="' + bi + '">' + escAttr(batchLabel(b)) + '</option>';
+                    html += '<option value="' + bi + '">' + escAttr(batchOptionLabel(b)) + '</option>';
                 }
                 html += '</select></div>';
                 html += '<div class="s-field" data-tip="此檔的預設劑別&#10;HIS 檔內「疫苗劑別」欄有值的人優先用檔內值"><span class="s-cap">預設劑別</span><input class="s-input" id="expDose_' + slot + '" style="width:64px;text-align:center;" value="' + escAttr((cfg._uiDose || {})[slot] || '1') + '"></div>';
@@ -2645,7 +2789,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             for (var bi = 0; bi < exportConfig.batches.length; bi++) {
                 var b = exportConfig.batches[bi];
                 if (b.family && b.family !== fam) continue;
-                opts += '<option value="' + bi + '">' + escAttr(batchLabel(b)) + '</option>';
+                opts += '<option value="' + bi + '">' + escAttr(batchOptionLabel(b)) + '</option>';
             }
             return opts;
         }
@@ -2995,7 +3139,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var t = document.getElementById('expNewType_' + slot).value.trim();
             var l = document.getElementById('expNewLot_' + slot).value.trim();
             if (!t || !l) { showModal('疫苗種類代號與批號都要填！'); return; }
-            exportConfig.batches.push({ type: t, lot: l, exp: '', qty: '', family: SLOT_FAMILY[slot] });
+            exportConfig.batches.push({ type: t, lot: l, exp: '', family: SLOT_FAMILY[slot] });
             exportConfig.lastPick = exportConfig.lastPick || {};
             exportConfig.lastPick[slot] = t + '|' + l;
             renderExport();
@@ -3031,10 +3175,11 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         function parseStockRows(rows) {
             // 找表頭列（含 疫苗名稱＋批號欄），通吃兩種 NIIS 匯出格式：
-            //   結存量：疫苗名稱/疫苗批號/有效期限/期間後結存
-            //   庫存量查詢：疫苗名稱/批號/有效日期/庫存總量(劑)（名稱帶「代號(中文)」尾巴）
+            //   結存量：疫苗名稱/疫苗批號/有效期限
+            //   庫存量查詢：疫苗名稱/批號/有效日期（名稱帶「代號(中文)」尾巴）
+            // 不取存量——庫存以官方 NIIS 為準，系統不干預
             var entries = [];
-            var hIdx = -1, cType = -1, cLot = -1, cExp = -1, cQty = -1;
+            var hIdx = -1, cType = -1, cLot = -1, cExp = -1;
             for (var r = 0; r < Math.min(rows.length, 10); r++) {
                 var row = rows[r] || [];
                 for (var c = 0; c < row.length; c++) {
@@ -3042,7 +3187,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     if (v.indexOf('疫苗名稱') !== -1) { hIdx = r; cType = c; }
                     if (v.indexOf('疫苗批號') !== -1 || v === '批號') cLot = c;   // 「批號類型」欄不可誤中
                     if (v.indexOf('有效期限') !== -1 || v.indexOf('有效日期') !== -1) cExp = c;
-                    if (v.indexOf('期間後結存') !== -1 || v.indexOf('庫存總量(劑)') !== -1 || v.indexOf('庫存總量（劑）') !== -1) cQty = c;
                 }
                 if (hIdx >= 0) break;
             }
@@ -3054,8 +3198,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 if (!t || !l) continue;
                 entries.push({
                     type: t, lot: l,
-                    exp: cExp >= 0 ? String(row2[cExp] == null ? '' : row2[cExp]).trim() : '',
-                    qty: cQty >= 0 ? String(row2[cQty] == null ? '' : row2[cQty]).trim() : ''
+                    exp: cExp >= 0 ? String(row2[cExp] == null ? '' : row2[cExp]).trim() : ''
                 });
             }
             return entries;
@@ -3095,12 +3238,15 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 google.script.run
                     .withSuccessHandler(function(res) {
                         if (res && res.success) {
+                            // 保留畫面暫存（日期/劑別），後端 clean 會丟掉底線欄位
+                            res.config._uiDateIso = (exportConfig || {})._uiDateIso;
+                            res.config._uiDose = (exportConfig || {})._uiDose;
                             exportConfig = res.config;
+                            lastImportDetail = res;
                             renderExport();
-                            var skipNote = res.skippedOther ? '、略過非目標疫苗 ' + res.skippedOther + ' 筆' : '';
-                            document.getElementById('expStockMsg').textContent =
-                                '✔ 已加入 ' + res.added + ' 筆、更新 ' + res.updated + ' 筆' + skipNote + '（已存雲端，下次直接拉選）';
-                            showFx('success', '針劑解析完成', '加入 ' + res.added + ' 筆、更新 ' + res.updated + ' 筆針劑' + skipNote, 2400);
+                            var skipNote = res.skippedOther ? '、略過非目標 ' + res.skippedOther + ' 筆' : '';
+                            showFx('success', '針劑解析完成', '加入 ' + res.added + ' 筆、更新 ' + res.updated + ' 筆' + skipNote +
+                                (res.sheetOk ? '（已存入試算表「針劑記憶」）' : '（已存雲端）'), 2600);
                         } else {
                             showFx('error', '匯入失敗', (res && res.error) || '未知錯誤', 3600);
                         }
@@ -3120,8 +3266,12 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             google.script.run
                 .withSuccessHandler(function(res) {
                     if (res && res.success) {
+                        res.config._uiDateIso = (exportConfig || {})._uiDateIso;
+                        res.config._uiDose = (exportConfig || {})._uiDose;
                         exportConfig = res.config;
-                        showFx('success', '設定已儲存', '針劑清單與代號已存雲端（全所共用）', 2200);
+                        showFx('success', '設定已儲存', res.sheetOk
+                            ? '偏好已存雲端；針劑清單在試算表「針劑記憶」（全所共用）'
+                            : '針劑清單與代號已存雲端（全所共用）', 2200);
                     } else showFx('error', '儲存失敗', (res && res.error) || '未知錯誤', 3200);
                 })
                 .withFailureHandler(function(err) { showFx('error', '儲存失敗', String(err), 3200); })

@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v5.6)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v5.7)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -94,6 +94,12 @@
  *  庫存總量(劑) 欄別名＋疫苗名稱去中文括號尾）；辨識不出三類別的疫苗
  *  （BCG/MMR…）略過不存並回報筆數；針劑匯入獨立——
  *  「身分別設定與匯出」按鈕常駐、開面板不再要求先夾 HIS 檔
+ * v5.7 變更：針劑記憶改存 Google Sheet「針劑記憶」工作表（看得到、可直接改；
+ *  首次自動遷移，之後表＝唯一真相，Properties 留副本備援）；不記存量
+ *  （庫存以官方 NIIS 為準）；匯入回傳加入/更新/略過明細清單（前端可展開檢視）；
+ *  前端各容器顯示「目前記憶針劑」小卡＋效期早於接種日期紅標/選單⚠；
+ *  儲存設定鈕加防呆說明（匯入即存，平常不用按）
+ *  ⚠ 貼回部署後首次執行需重新授權（新增試算表權限）
  */
 
 function doGet() {
@@ -494,26 +500,130 @@ function getDefaultNiisExportConfig() {
     // 流感公費門檻：特別月份（10月）需滿 specialMinAge，其他月份滿 normalMinAge
     fluRule: { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 },
     batches: [
-      { type: 'CoV_Moderna_LP', lot: '3053857_1150826-CDC', exp: '1150826', qty: '', family: 'corona' },
-      { type: '20PCV', lot: 'ND3093-CDC', exp: '1160430', qty: '', family: 'lung' },
-      { type: '20PCV', lot: 'NT3016-CDC', exp: '1161031', qty: '', family: 'lung' },
-      { type: '21PCV', lot: 'A007292-CDC', exp: '1170407', qty: '', family: 'lung' }
+      { type: 'CoV_Moderna_LP', lot: '3053857_1150826-CDC', exp: '1150826', family: 'corona' },
+      { type: '20PCV', lot: 'ND3093-CDC', exp: '1160430', family: 'lung' },
+      { type: '20PCV', lot: 'NT3016-CDC', exp: '1161031', family: 'lung' },
+      { type: '21PCV', lot: 'A007292-CDC', exp: '1170407', family: 'lung' }
     ],
     lastPick: {}
   };
 }
 
+// ===== 針劑記憶存 Google Sheet（v5.7）：看得到、可直接改，不佔 Script Properties =====
+var BATCH_SHEET_ID = '17PNFTsBZ3G8ObP25OgRLwyp8c7NpW6Z22Cx-qJRMxDA';   // 掛號對針統計試算表
+var BATCH_SHEET_NAME = '針劑記憶';
+var FAM_ZH = { corona: '新冠', flu: '流感', lung: '肺鏈' };
+var ZH_FAM = { '新冠': 'corona', '流感': 'flu', '肺鏈': 'lung' };
+
+function getBatchSheet_() {
+  try {
+    var ss = null;
+    try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
+    if (!ss) { try { ss = SpreadsheetApp.openById(BATCH_SHEET_ID); } catch (e2) {} }
+    if (!ss) return null;
+    var sh = ss.getSheetByName(BATCH_SHEET_NAME);
+    if (!sh) {
+      sh = ss.insertSheet(BATCH_SHEET_NAME);
+      sh.getRange('A:D').setNumberFormat('@');   // 純文字：防日期自動轉型/前導零遺失
+      sh.getRange(1, 1, 1, 4).setValues([['類別', '疫苗種類代號', '批號', '有效期限']])
+        .setFontWeight('bold').setBackground('#e8eaf6');
+      sh.setFrozenRows(1);
+      sh.setColumnWidths(1, 4, 150);
+    }
+    return sh;
+  } catch (e3) {
+    return null;   // 任一 API 失敗都視為表不可用（回退 Properties）
+  }
+}
+
+// 回傳 null＝試算表不可用（回退 Script Properties 副本）；[]＝可用但無資料
+function loadBatchesFromSheet_() {
+  try {
+  var sh = getBatchSheet_();
+  if (!sh) return null;
+  var last = sh.getLastRow();
+  if (last < 2) return [];
+  // getDisplayValues：就算儲存格被轉成日期/數字也拿顯示文字，不會出現 Date 物件
+  var vals = sh.getRange(2, 1, last - 1, 4).getDisplayValues();
+  var vaccineCfg = null;
+  var out = [], seen = {};
+  for (var i = 0; i < vals.length && out.length < 100; i++) {
+    var famRaw = String(vals[i][0] == null ? '' : vals[i][0]).trim();
+    var t = canonType(vals[i][1]).slice(0, 40);
+    var l = cleanCodeStr(vals[i][2]).slice(0, 40);
+    var exp = cleanCodeStr(vals[i][3]).slice(0, 10);
+    if (!t || !l || seen[t + '|' + l]) continue;
+    var fam = ZH_FAM[famRaw] ||
+      ((famRaw === 'corona' || famRaw === 'flu' || famRaw === 'lung') ? famRaw : '');
+    if (!fam) {   // 使用者手動貼列漏填/打錯類別 → 依辨識設定補判
+      if (!vaccineCfg) vaccineCfg = getVaccineConfigList();
+      var gk = recognizeVaccineCategory(t, vaccineCfg);
+      if (gk) {
+        for (var g = 0; g < vaccineCfg.length; g++) {
+          if (vaccineCfg[g].key === gk) { fam = vaccineCfg[g].family; break; }
+        }
+      }
+    }
+    if (fam !== 'corona' && fam !== 'flu' && fam !== 'lung') continue;   // 仍判不出＝非目標，略過
+    seen[t + '|' + l] = true;
+    out.push({ type: t, lot: l, exp: exp, family: fam });
+  }
+  return out;
+  } catch (eL) {
+    return null;   // 讀取途中任何 API 失敗＝表不可用，回退 Properties
+  }
+}
+
+function saveBatchesToSheet_(batches) {
+  try {
+    var sh = getBatchSheet_();
+    if (!sh) return false;
+    // 先寫後清尾：setValues 失敗時舊資料還在，不會落成空表
+    var rows = (batches || []).map(function(b) {
+      function s(v) { v = String(v == null ? '' : v); return v.charAt(0) === '=' ? "'" + v : v; }   // 防公式注入
+      return [FAM_ZH[b.family] || s(b.family), s(b.type), s(b.lot), s(b.exp)];
+    });
+    if (rows.length) sh.getRange(2, 1, rows.length, 4).setValues(rows);
+    var last = sh.getLastRow();
+    if (last > 1 + rows.length) sh.getRange(2 + rows.length, 1, last - 1 - rows.length, 4).clearContent();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function getNiisExportConfig() {
+  var cfg = null;
   try {
     var raw = PropertiesService.getScriptProperties().getProperty('niisExportConfig');
     if (raw) {
       var parsed = JSON.parse(raw);
-      if (parsed && parsed.batches) return cleanNiisExportConfig(parsed);   // 順帶補齊舊版缺欄位
+      if (parsed && parsed.batches) cfg = cleanNiisExportConfig(parsed);   // 順帶補齊舊版缺欄位
     }
   } catch (e) {
     // 設定損壞時回退預設
   }
-  return getDefaultNiisExportConfig();
+  if (!cfg) cfg = getDefaultNiisExportConfig();
+  // v5.7：針劑清單以試算表「針劑記憶」為準（首次自動把既有記憶搬進表）
+  var sheetBatches = loadBatchesFromSheet_();
+  if (sheetBatches !== null) {
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty('batchSheetPendingSync')) {
+      // 上次寫表失敗：以 Properties 副本為準（最新），先補寫回表，成功才恢復表＝真相
+      // （放最前：pending 時就算尚未遷移，過時的表也不得蓋掉 Properties 新資料）
+      if (saveBatchesToSheet_(cfg.batches)) {
+        props.deleteProperty('batchSheetPendingSync');
+        props.setProperty('batchSheetMigrated', '1');
+      }
+    } else if (!props.getProperty('batchSheetMigrated')) {
+      if (sheetBatches.length) cfg.batches = sheetBatches;   // 表已有資料以表為準
+      if (saveBatchesToSheet_(cfg.batches)) props.setProperty('batchSheetMigrated', '1');
+      // 寫表失敗＝不設 flag，下次再試（本輪照常用 Properties/表資料，不遺失）
+    } else {
+      cfg.batches = sheetBatches;   // 之後表就是唯一真相（清空＝真的清空）
+    }
+  }
+  return cfg;
 }
 
 function cleanNiisExportConfig(cfg) {
@@ -572,7 +682,6 @@ function cleanNiisExportConfig(cfg) {
     clean.batches.push({
       type: t, lot: l,
       exp: String(b.exp || '').trim().slice(0, 10),
-      qty: String(b.qty || '').trim().slice(0, 10),
       family: (b.family === 'corona' || b.family === 'flu' || b.family === 'lung') ? b.family : ''
     });
   }
@@ -587,16 +696,22 @@ function cleanNiisExportConfig(cfg) {
 function saveNiisExportConfig(cfg) {
   try {
     var clean = cleanNiisExportConfig(cfg);
-    PropertiesService.getScriptProperties().setProperty('niisExportConfig', JSON.stringify(clean));
-    return { success: true, config: clean };
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty('niisExportConfig', JSON.stringify(clean));
+    var sheetOk = saveBatchesToSheet_(clean.batches);   // v5.7：針劑同步寫入試算表（失敗仍有 Properties 副本）
+    // 寫表失敗記 pending：下次載入以 Properties 補寫回表，不讓過時的表蓋掉本次變更
+    if (sheetOk) props.deleteProperty('batchSheetPendingSync');
+    else props.setProperty('batchSheetPendingSync', '1');
+    return { success: true, config: clean, sheetOk: sheetOk };
   } catch (error) {
     return { success: false, error: error.toString() };
   }
 }
 
 /**
- * 匯入結存量檔解析出的針劑清單（前端解析 XLS 後傳入 [{type, lot, exp, qty}]）
- * 併入現有設定（同 種類+批號 視為同筆、更新效期/結存），依疫苗辨識設定自動歸類別。
+ * 匯入結存量／庫存量檔解析出的針劑清單（前端解析後傳入 [{type, lot, exp}]）
+ * 併入現有設定（同 種類+批號 視為同筆、更新效期），依疫苗辨識設定自動歸類別。
+ * v5.7：不記存量（庫存以官方 NIIS 為準）；回傳加入/更新/略過明細清單。
  */
 function importNiisBatches(entries, currentCfg) {
   try {
@@ -609,6 +724,7 @@ function importNiisBatches(entries, currentCfg) {
     for (var i = 0; i < cfg.batches.length; i++) byKey[cfg.batches[i].type + '|' + cfg.batches[i].lot] = cfg.batches[i];
 
     var added = 0, updated = 0, skippedOther = 0;
+    var addedList = [], updatedList = [], skippedMap = {};
     entries = entries || [];
     // v5.6：庫存量查詢檔含全部疫苗（BCG/MMR…）——辨識不出三類別者略過不存，
     // 否則 family 空值會出現在全部下拉選單（選單過濾放行空 family）；
@@ -619,7 +735,6 @@ function importNiisBatches(entries, currentCfg) {
       var l = cleanCodeStr(en.lot).slice(0, 40);
       if (!t || !l) continue;
       var exp = String(en.exp || '').trim().slice(0, 10);
-      var qty = String(en.qty == null ? '' : en.qty).trim().slice(0, 10);
       var k = t + '|' + l;
       var gk = recognizeVaccineCategory(t, config);
       var fam = gk ? (keyFam[gk] || '') : '';
@@ -631,24 +746,33 @@ function importNiisBatches(entries, currentCfg) {
           if (pos >= 0) cfg.batches.splice(pos, 1);
           delete byKey[k];
           skippedOther++;
+          skippedMap[t] = (skippedMap[t] || 0) + 1;
           continue;
         }
         if (!ex.family) ex.family = fam;   // 舊污染補上類別
         if (exp) ex.exp = exp;
-        if (qty !== '') ex.qty = qty;
         updated++;
+        updatedList.push({ type: t, lot: l });
       } else {
-        if (!fam) { skippedOther++; continue; }
+        if (!fam) {
+          skippedOther++;
+          skippedMap[t] = (skippedMap[t] || 0) + 1;
+          continue;
+        }
         if (cfg.batches.length >= 100) continue;   // 儲存上限（實務不會達到）
-        var nb = { type: t, lot: l, exp: exp, qty: qty, family: fam };
+        var nb = { type: t, lot: l, exp: exp, family: fam };
         cfg.batches.push(nb);
         byKey[k] = nb;
         added++;
+        addedList.push({ type: t, lot: l });
       }
     }
     var saved = saveNiisExportConfig(cfg);
     if (!saved.success) return saved;
-    return { success: true, config: saved.config, added: added, updated: updated, skippedOther: skippedOther };
+    var skippedList = [];
+    for (var sk in skippedMap) skippedList.push({ type: sk, count: skippedMap[sk] });
+    return { success: true, config: saved.config, added: added, updated: updated, skippedOther: skippedOther,
+             addedList: addedList, updatedList: updatedList, skippedList: skippedList, sheetOk: saved.sheetOk };
   } catch (error) {
     return { success: false, error: error.toString() };
   }
