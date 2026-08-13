@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v5.5)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v5.6)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -90,6 +90,10 @@
  *  流感>流感、肺鏈>肺鏈，種類代號與批號皆是；未歸類不列）
  * v5.5 變更：手動新增輸入框 placeholder 移除（原全顯示新冠範例造成混淆，
  *  使用者定案乾脆不顯示；候選仍由同類 datalist 提供）
+ * v5.6 變更：針劑檔解析通吃「庫存量查詢」.xlsx 格式（批號/有效日期/
+ *  庫存總量(劑) 欄別名＋疫苗名稱去中文括號尾）；辨識不出三類別的疫苗
+ *  （BCG/MMR…）略過不存並回報筆數；針劑匯入獨立——
+ *  「身分別設定與匯出」按鈕常駐、開面板不再要求先夾 HIS 檔
  */
 
 function doGet() {
@@ -604,9 +608,12 @@ function importNiisBatches(entries, currentCfg) {
     var byKey = {};
     for (var i = 0; i < cfg.batches.length; i++) byKey[cfg.batches[i].type + '|' + cfg.batches[i].lot] = cfg.batches[i];
 
-    var added = 0, updated = 0;
+    var added = 0, updated = 0, skippedOther = 0;
     entries = entries || [];
-    for (var e = 0; e < entries.length && e < 300; e++) {
+    // v5.6：庫存量查詢檔含全部疫苗（BCG/MMR…）——辨識不出三類別者略過不存，
+    // 否則 family 空值會出現在全部下拉選單（選單過濾放行空 family）；
+    // 儲存上限只計實際存入的目標批次，不被略過者消耗（與 cleanNiisExportConfig 的 100 一致）
+    for (var e = 0; e < entries.length; e++) {
       var en = entries[e] || {};
       var t = canonType(en.type).slice(0, 40);
       var l = cleanCodeStr(en.lot).slice(0, 40);
@@ -614,13 +621,25 @@ function importNiisBatches(entries, currentCfg) {
       var exp = String(en.exp || '').trim().slice(0, 10);
       var qty = String(en.qty == null ? '' : en.qty).trim().slice(0, 10);
       var k = t + '|' + l;
+      var gk = recognizeVaccineCategory(t, config);
+      var fam = gk ? (keyFam[gk] || '') : '';
       if (byKey[k]) {
-        if (exp) byKey[k].exp = exp;
-        if (qty !== '') byKey[k].qty = qty;
+        var ex = byKey[k];
+        if (!ex.family && !fam) {
+          // 舊版曾存入且仍辨識不出 → 一併清掉（污染來源同一種檔，重匯即清）
+          var pos = cfg.batches.indexOf(ex);
+          if (pos >= 0) cfg.batches.splice(pos, 1);
+          delete byKey[k];
+          skippedOther++;
+          continue;
+        }
+        if (!ex.family) ex.family = fam;   // 舊污染補上類別
+        if (exp) ex.exp = exp;
+        if (qty !== '') ex.qty = qty;
         updated++;
       } else {
-        var gk = recognizeVaccineCategory(t, config);
-        var fam = gk ? (keyFam[gk] || '') : '';
+        if (!fam) { skippedOther++; continue; }
+        if (cfg.batches.length >= 100) continue;   // 儲存上限（實務不會達到）
         var nb = { type: t, lot: l, exp: exp, qty: qty, family: fam };
         cfg.batches.push(nb);
         byKey[k] = nb;
@@ -629,7 +648,7 @@ function importNiisBatches(entries, currentCfg) {
     }
     var saved = saveNiisExportConfig(cfg);
     if (!saved.success) return saved;
-    return { success: true, config: saved.config, added: added, updated: updated };
+    return { success: true, config: saved.config, added: added, updated: updated, skippedOther: skippedOther };
   } catch (error) {
     return { success: false, error: error.toString() };
   }

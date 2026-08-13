@@ -381,12 +381,12 @@ h1::after {
 .big-button.export-button {
     background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
     color: white;
-    display: none;
+    /* v5.6：常駐顯示——針劑匯入獨立，不因未夾 HIS/NIIS 檔而無法進入 */
+    display: inline-block;
 }
 
 .big-button.print-button[style*="inline-block"],
-.big-button.send-button[style*="inline-block"],
-.big-button.export-button[style*="inline-block"] {
+.big-button.send-button[style*="inline-block"] {
     animation: actionBtnIn 0.55s var(--ease-out-back) both;
 }
 
@@ -1931,7 +1931,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             <div class="button-group">
                 <button type="button" class="big-button print-button" id="printButton" onclick="printPage()">一鍵列印</button>
                 <button type="button" class="big-button send-button" id="sendButton" onclick="showSendModal()">寄給承辦</button>
-                <button type="button" class="big-button export-button" id="exportButton" data-tip="設定身分別並把 HIS 檔中 NIIS 名單沒有的人&#10;產成媒體資料上傳檔（Big5 CSV）&#10;可直接匯入 NIIS" onclick="openExport()">身分別設定與匯出</button>
+                <button type="button" class="big-button export-button" id="exportButton" data-tip="設定身分別並把 HIS 檔中 NIIS 名單沒有的人&#10;產成媒體資料上傳檔（Big5 CSV）可直接匯入 NIIS&#10;未夾 HIS 檔也可先進入匯入針劑（庫存量／結存量）" onclick="openExport()">身分別設定與匯出</button>
             </div>
         </form>
 
@@ -2087,7 +2087,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v5.5</div>
+    <div class="version-tag">v5.6</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2237,7 +2237,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 phisFiles[slot] = file;
                 document.getElementById('phisCard_' + slot).classList.add('attached');
                 document.getElementById('phisName_' + slot).textContent = file.name;
-                updateExportButton();
                 if (currentFile) {
                     startStatistics(currentFile);  // 立即重新統計＋加計
                 } else {
@@ -2247,11 +2246,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             }).catch(function(err) {
                 showFx('error', '讀取檔案時發生錯誤', String(err), 3200);
             });
-        }
-
-        function updateExportButton() {
-            document.getElementById('exportButton').style.display =
-                (phisFiles.k || phisFiles.z || phisFiles.v) ? 'inline-block' : 'none';
         }
 
         /* ===== 產 NIIS 匯入檔（v3.7） ===== */
@@ -2423,7 +2417,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             if (el) el.textContent = currentRocDate() || '—';
             var sc = document.getElementById('expSum_common');
             if (sc) sc.textContent = '機構 ' + ((exportConfig && exportConfig.org) || '2341050013') +
-                '｜接種日 民國 ' + (currentRocDate() || '—') + '｜結存量匯入・日期設定　▸ 點擊展開';
+                '｜接種日 民國 ' + (currentRocDate() || '—') + '｜針劑匯入・日期設定　▸ 點擊展開';
         }
 
         function onDateChanged() {
@@ -2434,10 +2428,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         }
 
         function openExport() {
-            if (!phisFiles.k && !phisFiles.z && !phisFiles.v) {
-                showFx('error', '尚未夾帶 HIS 檔', '請先夾帶 6K/6Z/6V 掛號檔', 2600);
-                return;
-            }
+            // v5.6：不再要求先夾 HIS 檔——沒名單也能進面板匯入針劑（庫存量／結存量）
             expOutpost = false;   // 每次開面板重設為所內
             expOpenSec = '';      // 預設全部縮小，點選才展開
             document.getElementById('exportModal').classList.add('show');
@@ -2502,8 +2493,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             // ── 容器 1：檔案上傳與共用設定（手風琴：點標題展開；判讀設定已回歸各疫苗容器） ──
             html += '<div class="exp-sec common' + (expOpenSec === 'common' ? ' open' : '') + '">';
             html += '<div class="exp-sec-title" onclick="expToggleSec(\'common\', event)"><span class="exp-caret">▸</span>📁 檔案與共用設定</div>';
-            html += '<div class="exp-sum" id="expSum_common">機構 ' + escAttr(cfg.org || '2341050013') + '｜接種日 民國 ' + escAttr(isoToRoc(cfg._uiDateIso || defaultThursdayISO()) || '—') + '｜結存量匯入・日期設定　▸ 點擊展開</div>';
-            html += '<div class="exp-drop" data-tip="NIIS 匯出的結存量檔（.xls）&#10;可一次多選，夾帶後自動解析&#10;針劑自動歸類並存雲端記憶"><input type="file" id="expStockFiles" accept=".xls,.xlsx,.csv" multiple onchange="importStockFiles()"><span>📎 夾帶結存量檔（可多選，夾帶後自動解析）</span></div>';
+            html += '<div class="exp-sum" id="expSum_common">機構 ' + escAttr(cfg.org || '2341050013') + '｜接種日 民國 ' + escAttr(isoToRoc(cfg._uiDateIso || defaultThursdayISO()) || '—') + '｜針劑匯入・日期設定　▸ 點擊展開</div>';
+            html += '<div class="exp-drop" data-tip="NIIS 匯出的結存量檔（.xls）或&#10;庫存量查詢檔（.xlsx）皆可&#10;可一次多選，夾帶後自動解析&#10;針劑自動歸類並存雲端記憶"><input type="file" id="expStockFiles" accept=".xls,.xlsx,.csv" multiple onchange="importStockFiles()"><span>📎 夾帶結存量／庫存量檔（可多選，夾帶後自動解析）</span></div>';
             html += '<div id="expStockMsg" style="font-size:12.5px;color:#27ae60;margin:6px 0 10px;"></div>';
             html += '<div class="settings-row-head" style="align-items:flex-end;margin-bottom:0;">';
             html += '<div class="s-field" data-tip="固定值（佳里區衛生所），僅檢視"><span class="s-cap">接種機構代碼</span><div style="font-weight:600;padding:7px 2px;">' + escAttr(cfg.org || '2341050013') + '</div></div>';
@@ -3039,24 +3030,26 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         }
 
         function parseStockRows(rows) {
-            // 找表頭列（含 疫苗名稱＋疫苗批號），再取各欄位
+            // 找表頭列（含 疫苗名稱＋批號欄），通吃兩種 NIIS 匯出格式：
+            //   結存量：疫苗名稱/疫苗批號/有效期限/期間後結存
+            //   庫存量查詢：疫苗名稱/批號/有效日期/庫存總量(劑)（名稱帶「代號(中文)」尾巴）
             var entries = [];
             var hIdx = -1, cType = -1, cLot = -1, cExp = -1, cQty = -1;
             for (var r = 0; r < Math.min(rows.length, 10); r++) {
                 var row = rows[r] || [];
                 for (var c = 0; c < row.length; c++) {
-                    var v = String(row[c] == null ? '' : row[c]);
+                    var v = String(row[c] == null ? '' : row[c]).trim();
                     if (v.indexOf('疫苗名稱') !== -1) { hIdx = r; cType = c; }
-                    if (v.indexOf('疫苗批號') !== -1) cLot = c;
-                    if (v.indexOf('有效期限') !== -1) cExp = c;
-                    if (v.indexOf('期間後結存') !== -1) cQty = c;
+                    if (v.indexOf('疫苗批號') !== -1 || v === '批號') cLot = c;   // 「批號類型」欄不可誤中
+                    if (v.indexOf('有效期限') !== -1 || v.indexOf('有效日期') !== -1) cExp = c;
+                    if (v.indexOf('期間後結存') !== -1 || v.indexOf('庫存總量(劑)') !== -1 || v.indexOf('庫存總量（劑）') !== -1) cQty = c;
                 }
                 if (hIdx >= 0) break;
             }
             if (hIdx < 0 || cLot < 0) return entries;
             for (var r2 = hIdx + 1; r2 < rows.length; r2++) {
                 var row2 = rows[r2] || [];
-                var t = String(row2[cType] == null ? '' : row2[cType]).trim();
+                var t = String(row2[cType] == null ? '' : row2[cType]).split(/[（(]/)[0].trim();
                 var l = String(row2[cLot] == null ? '' : row2[cLot]).trim();
                 if (!t || !l) continue;
                 entries.push({
@@ -3096,7 +3089,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 var entries = [];
                 lists.forEach(function(l) { entries = entries.concat(l); });
                 if (entries.length === 0) {
-                    showFx('error', '解析不到針劑資料', '請確認是 NIIS 匯出的結存量檔！', 3000);
+                    showFx('error', '解析不到針劑資料', '請確認是 NIIS 匯出的結存量檔或庫存量查詢檔！', 3000);
                     return;
                 }
                 google.script.run
@@ -3104,9 +3097,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                         if (res && res.success) {
                             exportConfig = res.config;
                             renderExport();
+                            var skipNote = res.skippedOther ? '、略過非目標疫苗 ' + res.skippedOther + ' 筆' : '';
                             document.getElementById('expStockMsg').textContent =
-                                '✔ 已加入 ' + res.added + ' 筆、更新 ' + res.updated + ' 筆（已存雲端，下次直接拉選）';
-                            showFx('success', '結存量解析完成', '加入 ' + res.added + ' 筆、更新 ' + res.updated + ' 筆針劑', 2400);
+                                '✔ 已加入 ' + res.added + ' 筆、更新 ' + res.updated + ' 筆' + skipNote + '（已存雲端，下次直接拉選）';
+                            showFx('success', '針劑解析完成', '加入 ' + res.added + ' 筆、更新 ' + res.updated + ' 筆針劑' + skipNote, 2400);
                         } else {
                             showFx('error', '匯入失敗', (res && res.error) || '未知錯誤', 3600);
                         }
