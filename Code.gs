@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.3)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.4)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -124,6 +124,10 @@
  *  7) 主頁按鈕旁顯示目前針劑（依類別分組、效期舊→新）；過期由後端載入時自動清除不再詢問
  *  8) 匯入以庫存檔為準：檔裡沒有的視同已用完自動刪除
  *  9) 手動新增針劑移除（來源只剩庫存檔匯入）
+ * v6.4 變更（官方掛號代號上線：NV/XFG/XFGK/XFGB/LP/LPK/LPB/Flu/FluB/20PCV/21PCV/PPV/MPV/XFG-S）：
+ *  - 年齡：7 歲以下改依出生年月日算實際足歲（幼兒 4/5 歲分界才準），其餘仍只看出生年
+ *  - XFG-S（機構內接種專用）：照算 Moderna，但統計後彈窗提醒確認是否掛錯（僅提醒不阻擋）
+ *  - MPV（M痘）目前不開辦，維持「無法辨識已忽略」提示，日後有打再加群組
  */
 
 function doGet() {
@@ -319,6 +323,7 @@ function analyzeNIIS(jnContent, config) {
   }
   var idCategoryCount = {};   // id -> { 群組key: 掛號次數 }
   var unrecognized = [];      // 無法辨識的資料列 [{name, type}]
+  var warnPersons = [];       // 需提醒確認的掛號代號（XFG-S）[{id, name, type}]
 
   // 身份別欄（流感 F 對象別代碼）：表頭含「身份別／身分別」
   // v6.2：加抓 性別/地址/電話/劑次 欄（NIIS 名單的人也要能匯出，欄位齊全）
@@ -355,6 +360,9 @@ function analyzeNIIS(jnContent, config) {
       if (doseCol >= 0 && !idDoseMap[id]) idDoseMap[id] = (row[doseCol] || '').toString().trim();
     }
 
+    // v6.4：XFG-S＝機構內接種專用代號，所內名單理論上不會出現 → 收集起來提醒（照常計入）
+    if (WARN_CODE_RE.test(raw)) warnPersons.push({ id: id, name: name || id || '未知', type: raw });
+
     var cat = recognizeVaccineCategory(raw, config);
     if (!cat) {
       unrecognized.push({ name: name || '未知', type: raw || '空白' });
@@ -382,6 +390,7 @@ function analyzeNIIS(jnContent, config) {
     classification: classification,
     idCategoryCount: idCategoryCount,
     unrecognized: unrecognized,
+    warnPersons: warnPersons,
     idFCodeMap: idFCodeMap,
     hasIdentityCol: identityCol >= 0,
     idSexMap: idSexMap, idAddrMap: idAddrMap, idPhoneMap: idPhoneMap, idDoseMap: idDoseMap
@@ -977,11 +986,40 @@ function ageByYear(birthRoc, vacRoc) {
   return age < 0 ? null : age;
 }
 
+// 出生日期字串 → 民國 {y,m,d}：通吃 民國/西元、含分隔符或純數字 6~8 碼；無法解析回傳 null
+function parseRocYmd(s) {
+  s = String(s || '').trim();
+  var y, m, d;
+  var mm = s.match(/^(\d{2,4})[\/.-](\d{1,2})[\/.-](\d{1,2})/);
+  if (mm) { y = +mm[1]; m = +mm[2]; d = +mm[3]; }
+  else {
+    var g = s.replace(/\D/g, '');
+    if (g.length < 6 || g.length > 8) return null;
+    y = +g.slice(0, g.length - 4); m = +g.slice(-4, -2); d = +g.slice(-2);
+  }
+  if (y > 1911) y -= 1911;
+  if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31)) return null;
+  return { y: y, m: m, d: d };
+}
+
+// v6.4 年齡：原則只看出生年；7 歲以下改依年月日算實際足歲（生日未到減 1）
+function ageOf(birthRoc, vacRoc) {
+  var age = ageByYear(birthRoc, vacRoc);
+  if (age == null || age > 7) return age;
+  var b = parseRocYmd(birthRoc), v = parseRocYmd(vacRoc);
+  if (!b || !v) return age;
+  var exact = v.y - b.y - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
+  return exact < 0 ? null : exact;
+}
+
+// v6.4：需提醒確認的掛號代號（XFG-S＝機構內接種專用；容許全形連字號與「代號 - 中文」全文）
+var WARN_CODE_RE = /^XFG\s*[-－]\s*S(?![A-Za-z0-9])/i;
+
 /**
  * COVID-19 身分別代碼：依接種對象之年齡查對照表（表可於設定面板修改）
  */
 function covidIdentityByAge(birthRoc, vacRoc, table) {
-  var age = ageByYear(birthRoc, vacRoc);
+  var age = ageOf(birthRoc, vacRoc);
   if (age == null) return '';
   table = (table && table.length === 7) ? table : getDefaultCovidTable();
   for (var i = 0; i < table.length; i++) {
@@ -1084,7 +1122,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
         if (!pType || !pLot) noBatch.push(nameOf(pid));
         var identity = '';
         if (def.family === 'corona') {
-          // 新冠：一律依年齡自動判斷（只看出生年，對照表可設定）
+          // 新冠：一律依年齡自動判斷（只看出生年；7 歲以下算實際足歲，對照表可設定）
           identity = covidIdentityByAge(pBirthRaw, date, covidTable);
           if (!identity) noBirth.push(nameOf(pid));
         } else if (def.family === 'flu') {
@@ -1094,7 +1132,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
           } else if (np.fcode) {
             identity = np.fcode;
           } else {
-            var fAge = ageByYear(pBirthRaw, date);
+            var fAge = ageOf(pBirthRaw, date);
             if (fAge != null && fAge >= minAge) identity = fluDefault;
             else fluBad.push(nameOf(pid) + (fAge != null ? '（' + fAge + ' 歲）' : '（缺出生）'));
           }
@@ -1520,6 +1558,7 @@ function compareCSVFiles(jnContent, masterFileName, phisFiles) {
     htmlContent: result,
     nonCoronaCount: data.unrecognized.length,
     nonCoronaDetails: data.unrecognized,
+    warnPersons: data.warnPersons,
     stats: stats,
     totalPersons: totalPersons,
     totalShots: totalShots,

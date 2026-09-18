@@ -1626,6 +1626,29 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 .s-btn[data-tip],
 .modal-btn[data-tip] { cursor: pointer; }
 
+/* v6.4：掛號代號提醒彈窗（橘框呼吸光＋⚠ 搖晃） */
+.warn-card {
+    border: 3px solid #f59e0b;
+    animation: fxPop 0.45s var(--ease-out-back), warnGlow 1.6s ease-in-out 0.45s infinite;
+}
+
+.warn-emoji {
+    animation: fxEmojiPop 0.5s var(--ease-out-back), warnWiggle 1.2s ease-in-out 0.5s infinite;
+}
+
+@keyframes warnGlow {
+    0%, 100% { box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35), 0 0 0 0 rgba(245, 158, 11, 0.55); }
+    50%      { box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35), 0 0 0 14px rgba(245, 158, 11, 0); }
+}
+
+@keyframes warnWiggle {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    20%      { transform: rotate(-10deg) scale(1.08); }
+    40%      { transform: rotate(9deg) scale(1.08); }
+    60%      { transform: rotate(-5deg); }
+    80%      { transform: rotate(4deg); }
+}
+
 /* 自訂確認彈窗按鈕列 */
 .confirm-actions {
     display: flex;
@@ -2122,6 +2145,18 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         </div>
     </div>
 
+    <!-- v6.4：掛號代號提醒彈窗（XFG-S；僅提醒不阻擋） -->
+    <div id="warnModal" class="fx-overlay">
+        <div class="fx-card warn-card" style="max-width: 520px;">
+            <div class="fx-icon"><div class="fx-emoji warn-emoji">⚠️</div></div>
+            <div class="fx-title" id="warnTitle"></div>
+            <div class="fx-sub" id="warnMsg"></div>
+            <div class="confirm-actions">
+                <button type="button" class="modal-btn modal-btn-primary" onclick="closeCodeWarn()">我知道了</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 設定齒輪按鈕 -->
     <button type="button" class="settings-gear" data-tip="疫苗辨識設定&#10;檢視／編輯各疫苗的辨識代號&#10;可複製群組新增新疫苗" onclick="openSettings()"><span class="gear-ico">⚙️</span></button>
 
@@ -2138,7 +2173,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.3</div>
+    <div class="version-tag">v6.4</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2365,10 +2400,36 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return (m === r.specialMonth) ? r.specialMinAge : r.normalMinAge;
         }
 
+        // 出生日期字串 → 民國 {y,m,d}（同後端 parseRocYmd）
+        function parseRocYmdJs(s) {
+            s = String(s || '').trim();
+            var y, m, d;
+            var mm = s.match(/^(\d{2,4})[\/.-](\d{1,2})[\/.-](\d{1,2})/);
+            if (mm) { y = +mm[1]; m = +mm[2]; d = +mm[3]; }
+            else {
+                var g = s.replace(/\D/g, '');
+                if (g.length < 6 || g.length > 8) return null;
+                y = +g.slice(0, g.length - 4); m = +g.slice(-4, -2); d = +g.slice(-2);
+            }
+            if (y > 1911) y -= 1911;
+            if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31)) return null;
+            return { y: y, m: m, d: d };
+        }
+
+        // v6.4 年齡（同後端 ageOf）：原則只看出生年；7 歲以下依年月日算實際足歲
+        function ageOfJs(birth, vacRoc) {
+            var by = rocYearOfJs(birth);
+            var vy = rocYearOfJs(vacRoc);
+            if (by == null || vy == null) return null;
+            var age = vy - by;
+            if (age > 7) return age;
+            var b = parseRocYmdJs(birth), v = parseRocYmdJs(vacRoc);
+            if (!b || !v) return age;
+            return v.y - b.y - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
+        }
+
         function fluAgeOf(p) {
-            var by = rocYearOfJs(p.birth);
-            var vy = rocYearOfJs(currentRocDate());
-            return (by == null || vy == null) ? null : (vy - by);
+            return ageOfJs(p.birth, currentRocDate());
         }
 
         function fluDefaultCode() {
@@ -2409,9 +2470,11 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var fams = (t.getAttribute('data-fams') || '').split(',').filter(function(x) { return x; });
             if (fams.length === 0) return '';
             var pid = t.getAttribute('data-pid') || '';
-            var by = rocYearOfJs(t.getAttribute('data-birth') || '');
             var ref = refYearMonth();
-            var age = (by == null || ref.y == null) ? null : (ref.y - by);
+            var td = new Date();
+            var refRoc = currentRocDate() ||
+                String(td.getFullYear() - 1911) + ('0' + (td.getMonth() + 1)).slice(-2) + ('0' + td.getDate()).slice(-2);
+            var age = ageOfJs(t.getAttribute('data-birth') || '', refRoc);
             var lines = [];
             for (var i = 0; i < fams.length; i++) {
                 var f = fams[i];
@@ -2965,7 +3028,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 var bad = !sel.value && !p.fcode && (age == null || age < minAge);
                 row.classList.toggle('bad', bad);
                 var base = '身分證：' + p.id + (p.birth ? '\n出生：' + p.birth : '') +
-                    (age != null ? '\n年齡：' + age + ' 歲（只看出生年）' : '');
+                    (age != null ? '\n年齡：' + age + ' 歲（只看出生年；7 歲以下算足歲）' : '');
                 if (bad) {
                     row.setAttribute('data-tip', '⚠ 不符流感公費門檻：' +
                         (age == null ? '缺出生日期' : '接種月份需滿 ' + minAge + ' 歲，目前 ' + age + ' 歲') +
@@ -3278,7 +3341,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var hEl = document.querySelector('#ruleModal .custom-modal-header h2');
             if (hEl) hEl.textContent = sc === 'covid' ? '🦠 新冠：身分別自動判讀設定' : '💉 流感：身分別自動判讀設定';
             var cfg = exportConfig;
-            var html = '<div class="settings-help">依接種對象<b>年齡（只看出生年）</b>自動填身分別；' +
+            var html = '<div class="settings-help">依接種對象<b>年齡（只看出生年；7 歲以下依年月日算實際足歲）</b>自動填身分別；' +
                 '改完按「儲存設定」存雲端（全所共用），平常不需進來。</div>';
             if (sc === 'covid') {
             html += '<div class="settings-row"><div style="font-weight:600;margin-bottom:8px;">🦠 新冠：年齡對照表</div>';
@@ -3501,6 +3564,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                         if (result.nonCoronaCount > 0) {
                             showNonCoronaModal(result);
                         }
+                        if (result.warnPersons && result.warnPersons.length > 0) {
+                            showCodeWarn(result.warnPersons);   // v6.4：XFG-S 提醒（不阻擋）
+                        }
                     })
                     .withFailureHandler(function(error) {
                         if (mySeq !== statSeq) return;
@@ -3587,6 +3653,24 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var printWindow = window.open('', '_blank');
             printWindow.document.write('<!DOCTYPE html><html><head><title>疫苗異常人員清單</title><meta charset="UTF-8"><style>body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; padding: 20px; } button:hover { transform: translateY(-2px); } @media print { .no-print { display: none !important; } }</style></head><body>' + listHTML + '</body></html>');
             printWindow.document.close();
+        }
+
+        /* ===== v6.4：XFG-S（機構內接種專用代號）提醒彈窗——僅提醒、不阻擋，已照算 Moderna ===== */
+        function showCodeWarn(persons) {
+            var names = persons.map(function(p) { return p.name + '（' + p.type + '）'; });
+            document.getElementById('warnMsg').textContent =
+                '「XFG-S 新冠特殊族群」是機構內接種專用代號，\n所內名單理論上不會出現，請確認是否掛錯：\n\n' +
+                names.join('、') + '\n\n已照常計入 Moderna 針數（僅提醒，不影響統計與產檔）';
+            document.getElementById('warnTitle').textContent = '發現 XFG-S 掛號 ' + persons.length + ' 筆';
+            var m = document.getElementById('warnModal');
+            m.classList.remove('hide');
+            m.classList.add('show');
+        }
+
+        function closeCodeWarn() {
+            var m = document.getElementById('warnModal');
+            m.classList.add('hide');
+            setTimeout(function() { m.classList.remove('show'); m.classList.remove('hide'); }, 280);
         }
 
         /* ===== 非掛號資料提示 ===== */
