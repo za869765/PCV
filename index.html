@@ -2418,14 +2418,16 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         // v6.4 年齡（同後端 ageOf）：原則只看出生年；7 歲以下依年月日算實際足歲
         function ageOfJs(birth, vacRoc) {
-            var by = rocYearOfJs(birth);
-            var vy = rocYearOfJs(vacRoc);
-            if (by == null || vy == null) return null;
-            var age = vy - by;
-            if (age > 7) return age;
             var b = parseRocYmdJs(birth), v = parseRocYmdJs(vacRoc);
-            if (!b || !v) return age;
-            return v.y - b.y - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
+            if (!b || !v) {   // 解析不了完整日期才退回只看年
+                var by = rocYearOfJs(birth), vy = rocYearOfJs(vacRoc);
+                return (by == null || vy == null || vy < by) ? null : (vy - by);
+            }
+            var yd = v.y - b.y;
+            if (yd < 0) return null;
+            if (yd > 7) return yd;
+            var exact = yd - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
+            return exact < 0 ? null : exact;
         }
 
         function fluAgeOf(p) {

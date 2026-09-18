@@ -1004,11 +1004,12 @@ function parseRocYmd(s) {
 
 // v6.4 年齡：原則只看出生年；7 歲以下改依年月日算實際足歲（生日未到減 1）
 function ageOf(birthRoc, vacRoc) {
-  var age = ageByYear(birthRoc, vacRoc);
-  if (age == null || age > 7) return age;
   var b = parseRocYmd(birthRoc), v = parseRocYmd(vacRoc);
-  if (!b || !v) return age;
-  var exact = v.y - b.y - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
+  if (!b || !v) return ageByYear(birthRoc, vacRoc);   // 解析不了完整日期才退回只看年
+  var yd = v.y - b.y;
+  if (yd < 0) return null;
+  if (yd > 7) return yd;
+  var exact = yd - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
   return exact < 0 ? null : exact;
 }
 
