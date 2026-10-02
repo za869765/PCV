@@ -1759,6 +1759,12 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
 .multi-id-more { font-size: 12px; color: #92400e; }
 
+/* v6.8.2：快速設定幼兒區 */
+.setup-sec.setup-kid {
+    background: #f0f9ff;
+    border-color: #bae6fd;
+}
+
 .setup-sec.setup-warn {
     background: #fffbeb;
     border-color: #fcd34d;
@@ -2721,7 +2727,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.8.1</div>
+    <div class="version-tag">v6.8.2</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3318,7 +3324,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         }
 
         function openSetup() {
-            setupState = { outpost: expOutpost, batch: {}, review: {}, step: 1 };
+            setupState = { outpost: expOutpost, batch: {}, review: {}, step: 1,
+                           kidOn: true, kidMax: 6, kidBatch: -1 };   // 幼兒：預設 F01、未滿 7 歲、針劑同成人主選
             setSetupStep(1);
             ['k', 'z', 'v'].forEach(function(s) {
                 var sel = document.getElementById('expBatch_' + s);
@@ -3386,6 +3393,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 if (SLOT_FAMILY[s] === 'flu') h += unlockToggleHtml('flu');   // 機構專用針劑解鎖
             });
             h += '</div>';
+
+            h += kidSectionHtml();   // v6.8.2：幼兒一併設定 F01＋幼兒針劑
 
             h += '<div class="setup-sec"><div class="setup-cap">🧾 身分別</div><div class="setup-note">' +
                 '新冠：依年齡自動判讀｜流感：符合門檻者自動帶 <b>' + escAttr(setupState.outpost ? fout : fin) + '</b>，' +
@@ -3570,11 +3579,62 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             if (k && kw) { k.value = kw; setupReviewFilter(); }
         }
 
+        /* ===== v6.8.2：幼兒（流感、未滿 N+1 歲）在快速設定一起批次設定 F01＋幼兒針劑 ===== */
+        var KID_CODE = 'F01';
+
+        // 幼兒名單：流感、未匯出、年齡 ≤ 上限（預設 6＝未滿 7 歲）
+        function kidCandidates() {
+            var roc = currentRocDate();
+            var max = parseInt(setupState.kidMax, 10);
+            if (isNaN(max)) max = 6;
+            var out = [];
+            (slotPersonList.z || []).forEach(function(p) {
+                if (exportedIds.z[p.id]) return;
+                var a = ageOfJs(p.birth, roc);
+                if (a != null && a <= max) out.push({ p: p, age: a });
+            });
+            return out;
+        }
+
+        function kidSectionHtml() {
+            if (!(slotPersonList.z || []).length) return '';
+            var kids = kidCandidates();
+            var max = parseInt(setupState.kidMax, 10);
+            if (isNaN(max)) max = 6;
+            var nCode = 0;
+            kids.forEach(function(c) { if (!fluPersonCodes[c.p.id] && !c.p.fcode) nCode++; });
+            var h = '<div class="setup-sec setup-kid"><div class="setup-cap">👶 幼兒（流感，未滿 ' + (max + 1) + ' 歲）：' + kids.length + ' 人</div>';
+            h += '<div class="setup-row"><span class="setup-lbl">年齡上限</span>' +
+                '<input class="s-input" type="number" min="0" max="12" style="width:70px;text-align:center;" value="' + max + '" onchange="setupState.kidMax = this.value; renderSetup();">' +
+                '<span class="setup-note" style="margin:0;">歲以下（含）＝ 未滿 ' + (max + 1) + ' 歲</span></div>';
+            if (!kids.length) return h + '<div class="setup-note">名單中沒有這個年齡範圍的幼兒。</div></div>';
+            h += '<label class="setup-row" style="cursor:pointer;"><input type="checkbox"' + (setupState.kidOn ? ' checked' : '') +
+                ' onchange="setupState.kidOn = this.checked; renderSetup();" style="width:18px;height:18px;">' +
+                '<span>身分別一併設為 <b>' + KID_CODE + ' ' + escAttr(setupCodeLabel(KID_CODE)) + '</b>（' + nCode + ' 人；已有身分別的不覆蓋）</span></label>';
+            h += '<div class="setup-row"><span class="setup-lbl">幼兒針劑</span><select class="s-input" style="flex:1;min-width:0;" onchange="setupState.kidBatch = parseInt(this.value, 10)">' +
+                '<option value="-1">— 同成人主選針劑 —</option>';
+            batchIdxByExpiry('flu').forEach(function(bi) {
+                var bb = exportConfig.batches[bi];
+                h += '<option value="' + bi + '"' + (setupState.kidBatch === bi ? ' selected' : '') + (batchLocked(bb) ? ' disabled' : '') + '>' +
+                    escAttr(batchOptionLabel(bb)) + '</option>';
+            });
+            h += '</select></div>';
+            h += '<div class="setup-note">幼兒用的針劑常和成人不同（也可能相同），請依實際選擇；已個別指定針劑的不覆蓋。</div></div>';
+            return h;
+        }
+
         function doApplySetup() {
             collectExportInputs();   // 先把畫面上的個別拉選收回記憶體（接著要重繪）
             var review = setupState.review || {};
             var nReview = 0;
             for (var rid in review) { fluPersonCodes[rid] = review[rid]; nReview++; }   // 寫入前檢視挑出的特殊身分別
+            // v6.8.2：幼兒一併設定 F01 與幼兒針劑（已有個別拉選者不覆蓋）
+            var kidB = exportConfig.batches[setupState.kidBatch];
+            var nKidCode = 0, nKidBat = 0;
+            kidCandidates().forEach(function(c) {
+                if (setupState.kidOn && !fluPersonCodes[c.p.id] && !c.p.fcode) { fluPersonCodes[c.p.id] = KID_CODE; nKidCode++; }
+                if (kidB && !slotPersonBatch.z[c.p.id]) { slotPersonBatch.z[c.p.id] = kidB.type + '|' + kidB.lot; nKidBat++; }
+            });
             expOutpost = !!setupState.outpost;
             exportConfig.lastPick = exportConfig.lastPick || {};
             ['k', 'z', 'v'].forEach(function(s) {
@@ -3592,7 +3652,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             scheduleDraftSave();
             var st = slotStats();
             showFx('success', '已寫入', '主選針劑與預設身分別已套用（' + (expOutpost ? '所外' : '所內') + '）' +
-                (nReview ? '\n特殊身分別 ' + nReview + ' 人已改好' : '') + '\n' +
+                (nReview ? '\n特殊身分別 ' + nReview + ' 人已改好' : '') +
+                (nKidCode || nKidBat ? '\n幼兒' + (nKidCode ? ' F01 ' + nKidCode + ' 人' : '') + (nKidBat ? '、幼兒針劑 ' + nKidBat + ' 人' : '') : '') + '\n' +
                 (st.pending ? '剩 ' + st.pending + ' 人待處理，清單只顯示這些人' : '全部都處理好了，可以直接產生並下載'), 3400);
         }
 
