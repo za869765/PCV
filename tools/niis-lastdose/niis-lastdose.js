@@ -1,5 +1,5 @@
 /*
- * NIIS 最近接種（v1.3）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
+ * NIIS 最近接種（v1.4）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
  *
  * 用途：讀健保卡進到個案接種紀錄頁後點書籤，自動從畫面上的接種紀錄表找出
  *       新冠（CoV…）與流感（Flu…）最近一次接種日、距今天數，讓使用者決定要掛哪幾針；
@@ -14,18 +14,18 @@
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v1.3';
+    var VERSION = 'v1.4';
 
     var TOP = document, STATE_KEY = '__niisLastDose';
     if (TOP[STATE_KEY]) { TOP[STATE_KEY].close(); return; }   // 再點一次書籤＝關閉
 
     var VACS = [
         { key: 'Flu', name: '流感', fam: 'flu' },
-        { key: 'FluB', name: '幼兒流感', fam: 'flu' },
+        { key: 'FluB', name: '幼兒流感', fam: 'flu', child: 1 },
         { key: 'XFG', name: '莫XFG', fam: 'cov' },
         { key: 'NV', name: 'Novavax', fam: 'cov' },
-        { key: 'XFGK', name: '兒童莫XFG', fam: 'cov', kid: 1 },
-        { key: 'XFGB', name: '幼兒莫XFG', fam: 'cov', kid: 1 },
+        { key: 'XFGK', name: '兒童莫XFG', fam: 'cov', kid: 1, child: 1 },
+        { key: 'XFGB', name: '幼兒莫XFG', fam: 'cov', kid: 1, child: 1 },
     ];
     function isCov(code) { return /^cov|covid|新冠/i.test(code); }
     function isFlu(code) { return /flu|influ|流感/i.test(code); }
@@ -225,12 +225,16 @@
                 (diag.heads.length ? '<br>疑似表頭：' + diag.heads.map(esc).join('<br>') : '｜未見含「劑別／接種」的表頭') + '</div>';
             return;
         }
-        var age = '';
+        var age = '', ageN = null;
         if (birth) {
             var t = new Date(), a = t.getFullYear() - birth.getFullYear();
             if (t.getMonth() < birth.getMonth() || (t.getMonth() === birth.getMonth() && t.getDate() < birth.getDate())) a--;
+            ageN = a;
             age = '｜民國 ' + (birth.getFullYear() - 1911) + ' 年次・' + a + ' 歲';
         }
+        // 7 歲以上（滿 7 歲）不列幼兒／兒童針；讀不到出生日期則全列
+        var showVacs = VACS.filter(function (v) { return !(v.child && ageN != null && ageN >= 7); });
+        VACS.forEach(function (v) { if (showVacs.indexOf(v) < 0 && picked[v.fam] === v.key) picked[v.fam] = undefined; });
         var cov = latest(data.recs, isCov), flu = latest(data.recs, isFlu);
         var codes = [];
         data.recs.forEach(function (r) { var c = r.code.split(/[-_\s]/)[0]; if (codes.indexOf(c) < 0) codes.push(c); });
@@ -242,7 +246,7 @@
             cardHtml('flu', '🤧 流感最近一次', flu, fluTag) +
             '<div class="sub">讀到 ' + data.recs.length + ' 筆已接種紀錄' + (codes.length ? '（代號開頭：' + esc(codes.slice(0, 12).join('、')) + '）' : '') + '</div>' +
             '<div class="lbl">要掛哪幾針？（每類選一種，可只選一類）</div><div class="vacs">';
-        VACS.forEach(function (v) {
+        showVacs.forEach(function (v) {
             h += '<button class="vb ' + v.fam + (v.kid ? ' kid' : '') + (picked[v.fam] === v.key ? ' on' : '') + '" data-vac="' + esc(v.key) + '">' +
                 esc(v.key) + '<small>' + esc(v.name) + '</small></button>';
         });
