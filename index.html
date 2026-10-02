@@ -1441,6 +1441,17 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 .batch-chip.expired i { color: #dc2626; }
 .batch-chip.expired::before { content: '⚠ '; }
 
+/* v6.6.3：小卡上的推估廠牌 */
+.brand-tag {
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    background: #6366f1;
+    border-radius: 999px;
+    padding: 0 7px;
+    margin-right: 6px;
+}
+
 .chip-x {
     margin-left: 7px;
     cursor: pointer;
@@ -2326,7 +2337,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.6.2</div>
+    <div class="version-tag">v6.6.3</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2970,8 +2981,42 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             document.getElementById('exportModal').classList.remove('show');
         }
 
+        /* ===== v6.6.3：依「疫苗種類＋批號命名規則」推估廠牌（僅顯示參考，不影響匯出） =====
+           流感依原廠批號開頭：AFLUA…＝賽諾菲、P＋數字＝國光、F＋英文字母（FT/FJ/FK…）＝GSK、
+           數字…P…＝Seqirus；種類 FluAdj＝Seqirus 佐劑（Fluad）。
+           其他類別依種類代號判斷。順序＝由上往下第一個符合即採用。 */
+        var BRAND_RULES = [
+            { brand: 'Seqirus 佐劑',    type: /^FLUADJ$/i },
+            { brand: '賽諾菲 高劑量',   type: /^FLUHD$/i },
+            { brand: '賽諾菲',          type: /^FLU/i, lot: /^AFLUA/i },
+            { brand: '國光',            type: /^FLU/i, lot: /^P\d/i },
+            { brand: 'GSK',             type: /^FLU/i, lot: /^F[A-Z]/i },
+            { brand: 'Seqirus',         type: /^FLU/i, lot: /^\d+P\d*$/i },
+            { brand: 'Moderna',         type: /MODERNA/i },
+            { brand: 'Novavax',         type: /NOVAVAX/i },
+            { brand: '輝瑞 Prevenar 20', type: /^20PCV$/i },
+            { brand: 'MSD Capvaxive',   type: /^21PCV$/i },
+            { brand: 'MSD Pneumovax 23', type: /^(PPV|PPV23|23PPV)$/i }
+        ];
+
+        // 回傳 { brand: '國光'…（判不出＝''）, src: '疾管署公費'／'衛生局'／'' }
+        function batchBrand(b) {
+            var type = String((b && b.type) || '').trim();
+            var lot = String((b && b.lot) || '').trim();
+            var src = /-CDC$/i.test(lot) ? '疾管署公費' : (/-HB$/i.test(lot) ? '衛生局' : '');
+            var base = lot.replace(/-(CDC|HB)$/i, '');   // 去掉撥發來源尾碼再比對原廠批號
+            for (var i = 0; i < BRAND_RULES.length; i++) {
+                var r = BRAND_RULES[i];
+                if (r.type && !r.type.test(type)) continue;
+                if (r.lot && !r.lot.test(base)) continue;
+                return { brand: r.brand, src: src };
+            }
+            return { brand: '', src: src };
+        }
+
         function batchLabel(b) {
-            return b.type + '｜' + b.lot + (b.exp ? '（效期 ' + b.exp + '）' : '');
+            var bb = batchBrand(b);
+            return b.type + '｜' + b.lot + (bb.brand ? '〔' + bb.brand + '〕' : '') + (b.exp ? '（效期 ' + b.exp + '）' : '');
         }
 
         // ===== 效期防呆（v5.7）：針劑效期早於接種日期 → 選單⚠＋小卡紅標 =====
@@ -3059,8 +3104,12 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<div class="batch-chips"><span class="fam-cap ' + fam + '">' + FAM_LABEL[fam] + '</span>';
                 list.forEach(function(it) {
                     var b = it.b;
+                    var bb = batchBrand(b);   // v6.6.3：推估廠牌／撥發來源
                     html += '<span class="batch-chip" data-exp="' + escAttr(b.exp || '') +
-                        '" data-tip="存於試算表「針劑記憶」&#10;效期舊→新排序；過期會自動移除&#10;✕＝效期內但已用完，手動移除">' +
+                        '" data-tip="' + (bb.brand ? '推估廠牌：' + escAttr(bb.brand) + '（依批號命名規則，僅供參考）&#10;' : '') +
+                        (bb.src ? '撥發來源：' + escAttr(bb.src) + '&#10;' : '') +
+                        '存於試算表「針劑記憶」&#10;效期舊→新排序；過期會自動移除&#10;✕＝效期內但已用完，手動移除">' +
+                        (bb.brand ? '<b class="brand-tag">' + escAttr(bb.brand) + '</b>' : '') +
                         escAttr(b.type) + '｜' + escAttr(b.lot) + (b.exp ? '<i>效期 ' + escAttr(b.exp) + '</i>' : '') +
                         '<b class="chip-x" data-tip="此批已用完 → 從記憶與試算表移除" onclick="removeChipBatch(event,' + it.bi + ')">✕</b></span>';
                 });
