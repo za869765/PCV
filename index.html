@@ -1630,6 +1630,44 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     color: #fff;
 }
 
+/* v6.7.6：一鍵寫入前檢視名單 */
+.rv-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.rv-count { font-size: 13px; color: #475569; margin: 4px 0 6px; }
+
+.rv-list {
+    max-height: 42vh;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 4px;
+    text-align: left;
+}
+
+.rv-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 8px;
+    border-bottom: 1px dashed #e2e8f0;
+    cursor: pointer;
+}
+
+.rv-row:hover { background: #f1f5f9; }
+.rv-row.picked { background: #fef3c7; }
+
+.rv-name { flex: 1; font-weight: 600; }
+.rv-name small { display: block; font-weight: 400; color: #94a3b8; font-size: 11.5px; }
+
+.rv-code { font-size: 12.5px; color: #64748b; white-space: nowrap; }
+.rv-row.picked .rv-code { color: #92400e; font-weight: 700; }
+
 /* v6.7.2：多重身分提醒（優先公費對象中可能有醫事人員等） */
 .multi-id {
     background: #fffbeb;
@@ -2549,8 +2587,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 <div id="setupBody"></div>
             </div>
             <div class="custom-modal-footer">
-                <button class="modal-btn modal-btn-secondary" data-tip="不改任何設定，直接進入清單" onclick="closeSetup()">稍後再說</button>
-                <button class="modal-btn modal-btn-primary" data-tip="套用主選針劑與場次（預設身分別）&#10;清單只顯示待處理的人" onclick="applySetup()">✅ 是，一鍵寫入</button>
+                <button class="modal-btn modal-btn-secondary" id="setupBtnLater" data-tip="不改任何設定，直接進入清單" onclick="closeSetup()">稍後再說</button>
+                <button class="modal-btn modal-btn-primary" id="setupBtnOk" data-tip="先列出優先公費對象讓你檢視有沒有醫事人員&#10;確認後才寫入" onclick="applySetup()">✅ 是，一鍵寫入</button>
             </div>
         </div>
     </div>
@@ -2613,7 +2651,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.7.5</div>
+    <div class="version-tag">v6.7.6</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3210,7 +3248,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         }
 
         function openSetup() {
-            setupState = { outpost: expOutpost, batch: {} };
+            setupState = { outpost: expOutpost, batch: {}, review: {}, step: 1 };
+            setSetupStep(1);
             ['k', 'z', 'v'].forEach(function(s) {
                 var sel = document.getElementById('expBatch_' + s);
                 var cur = sel ? parseInt(sel.value, 10) : -1;
@@ -3284,9 +3323,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             if ((slotPersonList.z || []).length) {   // v6.7.2：多重身分提醒
                 h += '<div class="setup-sec setup-warn"><div class="setup-cap">⚠️ 多重身分提醒</div><div class="setup-note">' +
                     '符合年齡門檻的人會自動帶預設 <b>' + escAttr(setupState.outpost ? fout : fin) + '</b>；若其中有人<b>同時是醫事人員、防疫人員</b>等特殊身分，' +
-                    '應改拉選 F07A／F07B／F07C／F09…（個別拉選優先於預設）。系統無法自動得知誰是醫事人員，一鍵寫入後會詢問是否先檢視「🟢 優先公費對象」清單。</div></div>';
+                    '應改拉選 F07A／F07B／F07C／F09…（個別拉選優先於預設）。系統無法自動得知誰是醫事人員，按「是，一鍵寫入」後會<b>先列出這些人讓你檢視、挑選</b>，確認後才寫入。</div></div>';
             }
-            h += '<div class="setup-foot">按「是，一鍵寫入」後，清單只顯示 <b>待處理</b> 的人；隨時可按下方「🔄 重置」重新設定。</div>';
+            h += '<div class="setup-foot">按「是，一鍵寫入」→ 先檢視優先公費對象（挑出醫事人員等）→「確認寫入」後清單只顯示 <b>待處理</b> 的人；隨時可按下方「🔄 重置」重新設定。</div>';
             document.getElementById('setupBody').innerHTML = h;
         }
 
@@ -3310,8 +3349,143 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             document.getElementById('setupModal').classList.remove('show');
         }
 
+        // v6.7.6：「是，一鍵寫入」分兩步——
+        //   第 1 步（設定）按下 → 若流感有優先公費對象，先切到第 2 步列出這些人（會帶預設身分別），
+        //   讓使用者看一眼有沒有醫事人員等多重身分、勾選改 F07A／F07B…；確認後才真正寫入。
         function applySetup() {
+            if (setupCandidates().length) {
+                setupState.review = setupState.review || {};
+                setSetupStep(2);
+                renderSetupReview();
+                return;
+            }
+            doApplySetup();
+        }
+
+        // 寫入前檢視名單：流感、未匯出、未個別拉選、檔內無特殊身分別、依接種日期符合年齡門檻
+        function setupCandidates() {
+            var roc = currentRocDate();
+            var minAge = minAgeForRoc(roc);
+            var out = [];
+            (slotPersonList.z || []).forEach(function(p) {
+                if (exportedIds.z[p.id] || fluPersonCodes[p.id] || p.fcode) return;
+                var a = ageOfJs(p.birth, roc);
+                if (a != null && a >= minAge) out.push({ p: p, age: a });
+            });
+            return out;
+        }
+
+        function setSetupStep(step) {
+            setupState.step = step;
+            var later = document.getElementById('setupBtnLater');
+            var ok = document.getElementById('setupBtnOk');
+            if (later) {
+                later.textContent = step === 2 ? '← 上一步' : '稍後再說';
+                later.onclick = step === 2 ? setupBack : closeSetup;
+                later.setAttribute('data-tip', step === 2 ? '回到設定（已挑選的身分別會保留）' : '不改任何設定，直接進入清單');
+            }
+            if (ok) {
+                ok.textContent = step === 2 ? '✅ 確認寫入' : '✅ 是，一鍵寫入';
+                ok.onclick = step === 2 ? function() { doApplySetup(); } : applySetup;
+                ok.setAttribute('data-tip', step === 2 ? '寫入主選針劑與預設身分別（含剛挑選的特殊身分別）&#10;清單只顯示待處理的人'.replace(/&#10;/g, '\n')
+                                                       : '先列出優先公費對象讓你檢視有沒有醫事人員&#10;確認後才寫入'.replace(/&#10;/g, '\n'));
+            }
+        }
+
+        function setupBack() {
+            setSetupStep(1);
+            renderSetup();
+        }
+
+        function setupCodeLabel(code) {
+            var fcl = fluCodeList();
+            for (var i = 0; i < fcl.length; i++) if (fcl[i].code === code) return fcl[i].label || '';
+            return '';
+        }
+
+        function renderSetupReview() {
+            var idc = (exportConfig && exportConfig.idCodes) || {};
+            var def = setupState.outpost ? (idc.fluOut || 'F03B') : (idc.fluIn || 'F03A');
+            var cand = setupCandidates();
+            var rv = setupState.review || {};
+            var nChanged = 0;
+            cand.forEach(function(c) { if (rv[c.p.id]) nChanged++; });
+            var h = '<div class="setup-sec setup-warn"><div class="setup-cap">🩺 寫入前檢視：流感優先公費對象 ' + cand.length + ' 人</div>' +
+                '<div class="setup-note">這些人符合年齡門檻，寫入後會帶預設 <b>' + escAttr(def) + '</b>。' +
+                '<b>請看一眼有沒有醫事人員、防疫人員等多重身分</b>——勾選後按下方代碼改身分別；都沒有就直接按「✅ 確認寫入」。</div></div>';
+            h += '<div class="rv-tools">' +
+                '<input class="s-input" id="rvKw" placeholder="🔍 找姓名／身分證" oninput="setupReviewFilter()" style="flex:1;min-width:160px;">' +
+                '<button type="button" class="s-btn s-copy" onclick="setupReviewCheckAll(true)">全選</button>' +
+                '<button type="button" class="s-btn s-copy" onclick="setupReviewCheckAll(false)">全不選</button></div>';
+            h += '<div class="rv-tools">';
+            MULTI_ID_CODES.forEach(function(code) {
+                var lbl = setupCodeLabel(code);
+                if (!lbl && !fluCodeList().some(function(c) { return c.code === code; })) return;
+                h += '<button type="button" class="s-btn s-copy" onclick="setupReviewApply(\'' + code + '\')">' +
+                    escAttr(code) + ' ' + escAttr(lbl.length > 10 ? lbl.slice(0, 10) + '…' : lbl) + '</button>';
+            });
+            h += '<select class="s-input" id="rvMore" style="max-width:200px;"><option value="">其他身分別…</option>';
+            fluCodeList().forEach(function(c) {
+                if (MULTI_ID_CODES.indexOf(c.code) >= 0) return;
+                h += '<option value="' + escAttr(c.code) + '">' + escAttr(c.code + ' ' + (c.label || '')) + '</option>';
+            });
+            h += '</select><button type="button" class="s-btn s-copy" onclick="setupReviewApply((document.getElementById(\'rvMore\') || {}).value)">套用</button>';
+            h += '<button type="button" class="s-btn s-gray" onclick="setupReviewApply(\'\')">↩ 改回預設</button></div>';
+            h += '<div class="rv-count" id="rvCount">已挑出特殊身分別 <b>' + nChanged + '</b> 人</div>';
+            h += '<div class="rv-list">';
+            cand.forEach(function(c, k) {
+                var p = c.p, code = rv[p.id];
+                h += '<label class="rv-row' + (code ? ' picked' : '') + '" id="rvRow_' + k + '" data-id="' + escAttr(p.id) + '" data-kw="' + escAttr((p.name + ' ' + p.id).toUpperCase()) + '">' +
+                    '<input type="checkbox" id="rvChk_' + k + '">' +
+                    '<span class="rv-name">' + escAttr(p.name) + '（' + c.age + ' 歲）<small>' + escAttr(p.id) + (p.sex ? '・' + escAttr(p.sex) : '') + '</small></span>' +
+                    '<span class="rv-code" id="rvCode_' + k + '">' + (code ? '⭐ ' + escAttr(code + ' ' + setupCodeLabel(code)) : '預設 ' + escAttr(def)) + '</span></label>';
+            });
+            h += '</div>';
+            document.getElementById('setupBody').innerHTML = h;
+        }
+
+        function setupReviewFilter() {
+            var kw = ((document.getElementById('rvKw') || {}).value || '').trim().toUpperCase();
+            var rows = document.querySelectorAll('#setupBody .rv-row');
+            for (var i = 0; i < rows.length; i++) {
+                rows[i].style.display = (!kw || rows[i].getAttribute('data-kw').indexOf(kw) >= 0) ? '' : 'none';
+            }
+        }
+
+        function setupReviewCheckAll(on) {
+            var rows = document.querySelectorAll('#setupBody .rv-row');
+            for (var i = 0; i < rows.length; i++) {
+                var c = rows[i].querySelector('input[type="checkbox"]');
+                if (c) c.checked = on && rows[i].style.display !== 'none';
+            }
+        }
+
+        // 勾選的人改成指定身分別（code 空白＝改回預設）
+        function setupReviewApply(code) {
+            if (code == null) return;
+            setupState.review = setupState.review || {};
+            var rows = document.querySelectorAll('#setupBody .rv-row');
+            var n = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var c = rows[i].querySelector('input[type="checkbox"]');
+                if (!c || !c.checked || rows[i].style.display === 'none') continue;
+                var id = rows[i].getAttribute('data-id');
+                if (code) setupState.review[id] = code;
+                else delete setupState.review[id];
+                n++;
+            }
+            if (!n) { showModal('請先勾選要改身分別的人（例如醫事人員）。'); return; }
+            var kw = (document.getElementById('rvKw') || {}).value || '';
+            renderSetupReview();
+            var k = document.getElementById('rvKw');
+            if (k && kw) { k.value = kw; setupReviewFilter(); }
+        }
+
+        function doApplySetup() {
             collectExportInputs();   // 先把畫面上的個別拉選收回記憶體（接著要重繪）
+            var review = setupState.review || {};
+            var nReview = 0;
+            for (var rid in review) { fluPersonCodes[rid] = review[rid]; nReview++; }   // 寫入前檢視挑出的特殊身分別
             expOutpost = !!setupState.outpost;
             exportConfig.lastPick = exportConfig.lastPick || {};
             ['k', 'z', 'v'].forEach(function(s) {
@@ -3327,7 +3501,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             renderExport();
             refreshMainListBadges();
             scheduleDraftSave();
-            askReviewPriority(slotStats());   // v6.7.2：多重身分提醒
+            var st = slotStats();
+            showFx('success', '已寫入', '主選針劑與預設身分別已套用（' + (expOutpost ? '所外' : '所內') + '）' +
+                (nReview ? '\n特殊身分別 ' + nReview + ' 人已改好' : '') + '\n' +
+                (st.pending ? '剩 ' + st.pending + ' 人待處理，清單只顯示這些人' : '全部都處理好了，可以直接產生並下載'), 3400);
         }
 
         // 「🔄 重置」：清掉主選針劑、個別拉選、場次、篩選與縮放，當作第一次進來並重新詢問設定（已匯出紀錄保留）
@@ -4246,25 +4423,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var sel = document.getElementById('fluBatchCode');
             if (sel) sel.value = code;
             applyFluBatch();
-        }
-
-        // 一鍵寫入後：有優先公費對象就詢問要不要先檢視（找出醫事人員等多重身分）
-        function askReviewPriority(st) {
-            var n = (slotPersonList.z || []).length ? countPriority('z') : 0;
-            var head = '主選針劑與預設身分別已套用（' + (expOutpost ? '所外' : '所內') + '）';
-            if (!n) {
-                showFx('success', '已一鍵寫入', head + '\n' +
-                    (st.pending ? '剩 ' + st.pending + ' 人待處理，清單只顯示這些人' : '全部都處理好了，可以直接產生並下載'), 3200);
-                return;
-            }
-            showConfirm('多重身分提醒', head + '。\n\n流感「優先公費對象」共 ' + n + ' 人會帶預設 ' + fluDefaultCode() + '，\n' +
-                '其中若有醫事人員、防疫人員等多重身分，需改拉選 F07A／F07B／F09…\n\n' +
-                '要先檢視這 ' + n + ' 人嗎？' + (st.pending ? '\n（取消＝直接處理待處理的 ' + st.pending + ' 人）' : ''),
-                function() {
-                    slotFilter.z.status = 'default';
-                    writeFilter('z');
-                    refreshSlot('z', false);
-                }, '🩺');
         }
 
         function matchFilter(slot, info) {
