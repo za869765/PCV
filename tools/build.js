@@ -55,10 +55,22 @@ body{font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;max-width:760px;
 .bm{display:inline-block;background:linear-gradient(135deg,${t.color});color:#fff;padding:12px 22px;border-radius:12px;font-size:18px;font-weight:700;text-decoration:none;box-shadow:0 6px 18px rgba(0,0,0,.2)}
 .box{background:#f1f5f9;border-radius:10px;padding:12px 16px;margin:16px 0}
 code{background:#e2e8f0;padding:1px 6px;border-radius:4px}
+.warn{display:none;background:#fef2f2;border:2px solid #fca5a5;color:#b91c1c;border-radius:10px;padding:10px 14px;font-weight:700}
+.cp{border:none;border-radius:8px;padding:6px 14px;background:#475569;color:#fff;font:inherit;cursor:pointer}
 </style></head><body>
 <h1>${t.title} 書籤 ${ver}</h1>
-<p><b>安裝：</b>先按 <code>Ctrl＋Shift＋B</code> 顯示書籤列，再把下面的按鈕<b>用滑鼠拖到書籤列</b>。</p>
-<p><a class="bm" href="${bookmarklet.replace(/"/g, '&quot;')}">${t.title}</a></p>
+<p><b>安裝方法一（拖曳）：</b>先按 <code>Ctrl＋Shift＋B</code> 顯示書籤列，再把下面的按鈕<b>用滑鼠按住、拖到書籤列放開</b>（不是點它）。</p>
+<p><a class="bm" id="bm" href="${bookmarklet.replace(/"/g, '&quot;')}">${t.title}</a></p>
+<div class="warn" id="warn">⚠ 這裡是安裝頁，點按鈕不會有作用。請把按鈕<b>拖到書籤列</b>，之後在要用的網頁上點<b>書籤列上的書籤</b>。</div>
+<p><b>安裝方法二（拖不上去時）：</b><button class="cp" id="cp">📋 複製書籤網址</button> → 在書籤列空白處按右鍵 →「新增網頁」→ 名稱填「${t.title.replace(/^\S+\s/, '')}」、網址按 <code>Ctrl＋V</code> 貼上 → 儲存。</p>
+<p>裝好後書籤列會出現「${t.title}」（書籤列太滿時在最右邊的 <code>»</code> 裡）。</p>
+<script>
+document.getElementById('bm').addEventListener('click', function (e) { e.preventDefault(); document.getElementById('warn').style.display = 'block'; });
+document.getElementById('cp').addEventListener('click', function () {
+    var b = this, s = document.getElementById('bm').href;
+    navigator.clipboard.writeText(s).then(function () { b.textContent = '✅ 已複製，請到書籤列新增網頁貼上'; }, function () { b.textContent = '複製失敗，請改用拖曳'; });
+});
+</script>
 <div class="box"><b>使用：</b>
 <ol>
 ${t.usage.map(u => '<li>' + u + '</li>').join('\n')}
