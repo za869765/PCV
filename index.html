@@ -576,6 +576,24 @@ h1                { animation-delay: 0.05s; }
     line-height: var(--pn-lh, 1.7);
 }
 
+/* v6.7.5：名冊群組外框——細框＋左側群組色條，標題放大並加底線，群組之間一眼分開 */
+.roster-sec {
+    border: 1.5px solid #cbd5e1;
+    border-left-width: 6px;
+    border-radius: 8px;
+    padding: 6px 12px 8px;
+    margin-bottom: 12px;
+}
+
+.roster-sec > h3 {
+    font-size: 1.15rem;
+    margin: 0 0 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.roster-sec .roster { margin-top: 4px; }
+
 .sn-blk {
     display: flex;
     align-items: baseline;
@@ -2297,6 +2315,24 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
     #result .sn-blk { padding: 1px 0 !important; }
 
+    /* v6.7.5：群組外框（列印開頭的 * 重設會清掉留白，這裡用 !important 補回） */
+    #result .roster-sec {
+        border: 1.5px solid #94a3b8 !important;
+        border-left-width: 6px !important;
+        border-radius: 6px;
+        padding: 5px 10px 6px !important;
+        margin-bottom: 10px !important;
+    }
+
+    #result .roster-sec > h3 {
+        font-size: 15px !important;
+        margin: 0 0 4px !important;
+        padding-bottom: 3px !important;
+        border-bottom: 1px solid #cbd5e1;
+    }
+
+    #result .roster-sec .roster { margin-top: 3px !important; }
+
     body.print-dense #result .section {
         margin-bottom: 6px !important;
     }
@@ -2577,7 +2613,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.7.4</div>
+    <div class="version-tag">v6.7.5</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -5134,6 +5170,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 box.removeAttribute('style');
                 box.className = 'roster';
                 box.appendChild(frag);
+                // v6.7.5：整個群組加外框，左側色條用該群組標題色
+                secs[s].classList.add('roster-sec');
+                var h3 = secs[s].querySelector('h3');
+                if (h3 && h3.style.color) secs[s].style.borderLeftColor = h3.style.color;
             }
             applyPrintFont();
         }
