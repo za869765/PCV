@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.8.8)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.8.9)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -152,6 +152,7 @@
  *    公費門檻錯誤訊息改以年次表示（需民國 X 年次（含）以前出生）
  * v6.8.8：analyzeNIIS 記錄新冠掛號代號 idCovCodeMap（XFGK／LPB…），niisPersonsByFam_／getNiisFamilyPersons 回傳 vcode，
  *    前端據此分成人莫／幼兒莫（多劑型）
+ * v6.8.9：流感也記錄掛號代號（idVacCodeByFam.flu：Flu／FluB），FluB＝幼兒流感
  */
 
 function doGet() {
@@ -362,7 +363,7 @@ function analyzeNIIS(jnContent, config) {
     if (doseCol === -1 && (hv.indexOf('劑次') !== -1 || hv.indexOf('劑別') !== -1)) doseCol = hc;
   }
   var idFCodeMap = {};        // 流感受種者 id -> F 對象別代碼
-  var idCovCodeMap = {};      // v6.8.8：新冠受種者 id -> 掛號代號（XFGK／LPB…）
+  var idVacCodeByFam = { corona: {}, flu: {} };   // v6.8.8/6.8.9：類別 -> id -> 掛號代號（XFGK／LPB／FluB…）
   var idSexMap = {}, idAddrMap = {}, idPhoneMap = {}, idDoseMap = {};
 
   for (var i = 1; i < rows.length; i++) {
@@ -404,9 +405,10 @@ function analyzeNIIS(jnContent, config) {
 
     // v6.8.8：新冠列記錄掛號代號（XFG／XFGK／XFGB／LP／LPK／LPB…，取「代號 - 中文」的代號部分）
     //         K＝兒童（5 歲）、B＝幼兒（6 個月～4 歲）→ 前端據此分「成人莫／幼兒莫（多劑型）」
-    if (keyFamily[cat] === 'corona' && !idCovCodeMap[id]) {
+    // v6.8.9：流感也記錄（Flu／FluB；FluB＝幼兒流感 6 個月～6 歲）
+    if ((keyFamily[cat] === 'corona' || keyFamily[cat] === 'flu') && !idVacCodeByFam[keyFamily[cat]][id]) {
       var vc = String(raw || '').split(/[\s\-－(（]/)[0].trim().toUpperCase();
-      if (vc) idCovCodeMap[id] = vc;
+      if (vc) idVacCodeByFam[keyFamily[cat]][id] = vc;
     }
 
     // 流感列記錄 F 對象別代碼
@@ -424,7 +426,7 @@ function analyzeNIIS(jnContent, config) {
     unrecognized: unrecognized,
     warnPersons: warnPersons,
     idFCodeMap: idFCodeMap,
-    idCovCodeMap: idCovCodeMap,
+    idVacCodeByFam: idVacCodeByFam,
     hasIdentityCol: identityCol >= 0,
     idSexMap: idSexMap, idAddrMap: idAddrMap, idPhoneMap: idPhoneMap, idDoseMap: idDoseMap
   };
@@ -447,7 +449,7 @@ function niisPersonsByFam_(jnContent, config, keyFam) {
         phone: (data.idPhoneMap || {})[id] || '',
         dose: (data.idDoseMap || {})[id] || '',
         fcode: (data.idFCodeMap || {})[id] || '',
-        vcode: fam === 'corona' ? ((data.idCovCodeMap || {})[id] || '') : ''
+        vcode: ((data.idVacCodeByFam || {})[fam] || {})[id] || ''
       };
     }
   }

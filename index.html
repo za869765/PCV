@@ -2768,7 +2768,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.8.8</div>
+    <div class="version-tag">v6.8.9</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3433,7 +3433,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 if (isFlu) h += '<div class="setup-flu"><div class="setup-flu-cap">💉 流感 6Z</div>';
                 if (isCov) h += '<div class="setup-flu setup-cov"><div class="setup-flu-cap">🦠 新冠 6K</div>';
                 h += '<div class="setup-row"><span class="setup-lbl">' +
-                    (isFlu ? '👴 老人流感<small class="setup-lbl-sub">7 歲以上・' + adultCount('z') + ' 人</small>'
+                    (isFlu ? '👴 老人流感<small class="setup-lbl-sub">Flu・' + adultCount('z') + ' 人</small>'
                            : (isCov ? '🧑 成人莫<small class="setup-lbl-sub">單劑型 XFG／LP・' + adultCount('k') + ' 人</small>' : NAMES[s])) + '</span>' +
                     '<select class="s-input" style="flex:1;min-width:0;" onchange="setupState.batch[\'' + s + '\'] = parseInt(this.value, 10)">' +
                     '<option value="-1">— 不設定 —</option>';
@@ -3668,7 +3668,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var roc = currentRocDate(), max = slot === 'k' ? KID_MAX_AGE_COVID : KID_MAX_AGE, n = 0;
             (slotPersonList[slot] || []).forEach(function(p) {
                 if (exportedIds[slot][p.id]) return;
-                if (slot === 'k' && p.vcode) { if (!isKidCovCode(p.vcode)) n++; return; }   // v6.8.8：依掛號代號
+                if ((slot === 'k' || slot === 'z') && p.vcode) { if (!isKidCode(slot, p.vcode)) n++; return; }   // v6.8.8/6.8.9：依掛號代號
                 var a = ageOfJs(p.birth, roc);
                 if (a != null && a > max) n++;
             });
@@ -3678,6 +3678,11 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         // v6.8.8：新冠掛號代號 XFGK／LPK（兒童 5 歲）、XFGB／LPB（幼兒 6 個月～4 歲）＝幼兒莫（多劑型）
         function isKidCovCode(c) {
             return /^(XFG|LP)[KB]$/.test(String(c || '').toUpperCase());
+        }
+
+        // v6.8.9：依掛號代號判斷幼兒——新冠 XFGK／XFGB／LPK／LPB；流感 FluB（幼兒流感 6 個月～6 歲）
+        function isKidCode(slot, c) {
+            return slot === 'k' ? isKidCovCode(c) : String(c || '').toUpperCase() === 'FLUB';
         }
 
         function noBirthCount(slot) {
@@ -3702,8 +3707,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             (slotPersonList[slot] || []).forEach(function(p) {
                 if (exportedIds[slot][p.id]) return;
                 var a = ageOfJs(p.birth, roc);
-                if (slot === 'k' && p.vcode) {   // v6.8.8：新冠有掛號代號 → 直接看代號（與現場勾選類別一致）
-                    if (isKidCovCode(p.vcode)) out.push({ p: p, age: a });
+                if ((slot === 'k' || slot === 'z') && p.vcode) {   // v6.8.8/6.8.9：有掛號代號 → 直接看代號（與現場勾選類別一致）
+                    if (isKidCode(slot, p.vcode)) out.push({ p: p, age: a });
                     return;
                 }
                 if (a != null && a <= max) out.push({ p: p, age: a });
@@ -3733,7 +3738,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         // v6.8.4：「👶 幼兒流感」列（放在流感框內、老人流感下方）：幼兒針劑＋F01＋年齡上限
         function kidRowsHtml() {
             var kids = kidCandidates();
-            var h = '<div class="setup-row"><span class="setup-lbl">👶 幼兒流感<small class="setup-lbl-sub">未滿 7 歲・' + kids.length + ' 人</small></span>';
+            var h = '<div class="setup-row"><span class="setup-lbl">👶 幼兒流感<small class="setup-lbl-sub">FluB（6個月～6歲）・' + kids.length + ' 人</small></span>';
             if (kids.length) {
                 h += '<select class="s-input" style="flex:1;min-width:0;" onchange="setupState.kidBatch = parseInt(this.value, 10)">' +
                     '<option value="-1">— 同老人流感針劑 —</option>';
@@ -3744,7 +3749,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 });
                 h += '</select>';
             } else {
-                h += '<span class="setup-note" style="margin:0;">名單中沒有未滿 7 歲的幼兒</span>';
+                h += '<span class="setup-note" style="margin:0;">名單中沒有 FluB 幼兒流感掛號</span>';
             }
             h += '</div>';
             if (kids.length) {   // v6.8.6：幼兒不會有多重身分 → 身分別直接套用 F01（不需勾選）
