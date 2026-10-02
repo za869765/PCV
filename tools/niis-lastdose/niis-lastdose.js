@@ -1,32 +1,24 @@
 /*
- * NIIS 最近接種（v1.5）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
+ * NIIS 最近接種（v1.6）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
  *
  * 用途：讀健保卡進到個案接種紀錄頁後點書籤，自動從畫面上的接種紀錄表找出
- *       新冠（CoV…）與流感（Flu…）最近一次接種日、距今天數，讓使用者決定要掛哪幾針；
- *       選好類別按「複製」，到掛號平台「⚡ 快速掛號」輸入框按 Ctrl+V 即自動填好現場掛號視窗。
+ *       新冠（CoV…）與流感（Flu…）最近一次接種日、距今天數、新冠 84 天間隔與最快可打日（週四）；
+ *       點證號或「複製身分證」，到掛號平台「現場掛號」身分證欄 Ctrl+V。
  * 安全設計：
  *   - 完全唯讀：只讀取畫面上已顯示的表格，不點擊、不送出、不修改 NIIS 任何資料
  *   - 不讀取、不保存任何帳號密碼或登入憑證；不呼叫任何 API
- *   - 不連線到任何外部網站；只把「身分證＋類別代號」複製到本機剪貼簿（使用者按下才複製）
+ *   - 不連線到任何外部網站；只把身分證字號複製到本機剪貼簿（使用者按下才複製）
  *   - 全部程式碼都在書籤內，不從網路載入外部程式
  * 用法：在 NIIS 點書籤開啟面板（NIIS 是框架頁，面板放在右側內容框架）；換下一位時面板自動更新；再點一次書籤＝關閉。
  */
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v1.5';
+    var VERSION = 'v1.6';
 
     var TOP = document, STATE_KEY = '__niisLastDose';
     if (TOP[STATE_KEY]) { TOP[STATE_KEY].close(); return; }   // 再點一次書籤＝關閉
 
-    var VACS = [
-        { key: 'Flu', name: '流感', fam: 'flu' },
-        { key: 'FluB', name: '幼兒流感', fam: 'flu', child: 1 },
-        { key: 'XFG', name: '莫XFG', fam: 'cov' },
-        { key: 'NV', name: 'Novavax', fam: 'cov' },
-        { key: 'XFGK', name: '兒童莫XFG', fam: 'cov', kid: 1, child: 1 },
-        { key: 'XFGB', name: '幼兒莫XFG', fam: 'cov', kid: 1, child: 1 },
-    ];
     function isCov(code) { return /^cov|covid|新冠/i.test(code); }
     function isFlu(code) { return /flu|influ|流感/i.test(code); }
 
@@ -148,7 +140,6 @@
         '#niis-ld-panel .who{font-size:13px;color:#475569;background:#f1f5f9;border-radius:8px;padding:6px 9px}' +
         '#niis-ld-panel .who b{color:#0f172a;font-size:15px;letter-spacing:1px}' +
         '#niis-ld-panel .who .pid{cursor:pointer;border-bottom:1px dashed #64748b}#niis-ld-panel .who .pid:hover{background:#e0f2f1}' +
-        '#niis-ld-panel .copy small{display:block;font-size:11.5px;font-weight:400;opacity:.85}' +
         '#niis-ld-panel .card{border-radius:10px;padding:8px 11px;border:2px solid}' +
         '#niis-ld-panel .card.cov{border-color:#fca5a5;background:#fef2f2}' +
         '#niis-ld-panel .card.flu{border-color:#93c5fd;background:#eff6ff}' +
@@ -161,19 +152,11 @@
         '#niis-ld-panel .gapsub{font-size:11.5px;font-weight:400;margin-left:8px;color:#a16207}' +
         '#niis-ld-panel .tag{display:inline-block;border-radius:999px;padding:0 8px;font-size:12px;font-weight:700;margin-left:6px}' +
         '#niis-ld-panel .tag.warn{background:#fde68a;color:#92400e}#niis-ld-panel .tag.ok{background:#bbf7d0;color:#166534}' +
-        '#niis-ld-panel .lbl{font-size:12.5px;color:#64748b;font-weight:700}' +
-        '#niis-ld-panel .vacs{display:flex;gap:5px;flex-wrap:wrap}' +
-        '#niis-ld-panel .vb{border:2px solid #cbd5e1;background:#fff;color:#334155;border-radius:8px;padding:5px 12px;cursor:pointer;font:inherit;font-size:14px;font-weight:700}' +
-        '#niis-ld-panel .vb small{font-weight:400;color:#94a3b8;margin-left:3px;font-size:11px}' +
-        '#niis-ld-panel .vb.kid{font-size:12.5px;padding:3px 9px}' +
-        '#niis-ld-panel .vb.on{color:#fff}#niis-ld-panel .vb.on small{color:rgba(255,255,255,.85)}' +
-        '#niis-ld-panel .vb.flu.on{background:#2563eb;border-color:#2563eb}#niis-ld-panel .vb.cov.on{background:#dc2626;border-color:#dc2626}' +
         '#niis-ld-panel .copy{border:none;border-radius:10px;padding:10px;cursor:pointer;font:inherit;font-size:16px;font-weight:800;color:#fff;background:#00796b}' +
         '#niis-ld-panel .copy:disabled{background:#94a3b8;cursor:not-allowed}' +
         '#niis-ld-panel .err{color:#b91c1c;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:7px 10px;font-size:13px}' +
         '#niis-ld-panel .ft{font-size:11px;color:#94a3b8;text-align:right;padding:4px 12px 8px}';
 
-    var picked = {};      // fam → key
     var pid = '';
     var host = null;      // 目前放面板的 document（NIIS 是框架頁：放在右側內容框架）
     var frameEl = null;   // 內容框架元素（重新載入＝換下一位時自動重掛面板）
@@ -223,15 +206,11 @@
             line: '<div class="gap">⛔ 最快可打：<b>' + fmtRoc(thu) + '（四）</b><span class="gapsub">滿 ' + COV_GAP + ' 天為 ' + fmtRoc(ok) + '</span></div>'
         };
     }
-    function pickedKeys() {
-        return VACS.filter(function (v) { return picked[v.fam] === v.key; }).map(function (v) { return v.key; });
-    }
 
     function render() {
         if (!panel) return;
         var docs = allDocs();
         var newPid = (readLabel(docs, /^證號[:：]?$/).toUpperCase().match(/[A-Z][A-Z0-9]\d{8}/) || [''])[0];
-        if (newPid !== pid) picked = {};          // 換人 → 清掉上一位選的類別
         pid = newPid;
         var birth = rocToDate(readLabel(docs, /^出生日期[:：]?$/));
         var data = readRecords(docs);
@@ -242,16 +221,12 @@
                 (diag.heads.length ? '<br>疑似表頭：' + diag.heads.map(esc).join('<br>') : '｜未見含「劑別／接種」的表頭') + '</div>';
             return;
         }
-        var age = '', ageN = null;
+        var age = '';
         if (birth) {
             var t = new Date(), a = t.getFullYear() - birth.getFullYear();
             if (t.getMonth() < birth.getMonth() || (t.getMonth() === birth.getMonth() && t.getDate() < birth.getDate())) a--;
-            ageN = a;
             age = '｜民國 ' + (birth.getFullYear() - 1911) + ' 年次・' + a + ' 歲';
         }
-        // 7 歲以上（滿 7 歲）不列幼兒／兒童針；讀不到出生日期則全列
-        var showVacs = VACS.filter(function (v) { return !(v.child && ageN != null && ageN >= 7); });
-        VACS.forEach(function (v) { if (showVacs.indexOf(v) < 0 && picked[v.fam] === v.key) picked[v.fam] = undefined; });
         var cov = latest(data.recs, isCov), flu = latest(data.recs, isFlu);
         var covGap = covGapInfo(cov);
         var codes = [];
@@ -263,15 +238,8 @@
             cardHtml('cov', '🦠 新冠最近一次', cov, covGap.tag, covGap.line) +
             cardHtml('flu', '🤧 流感最近一次', flu, fluTag) +
             '<div class="sub">讀到 ' + data.recs.length + ' 筆已接種紀錄' + (codes.length ? '（代號開頭：' + esc(codes.slice(0, 12).join('、')) + '）' : '') + '</div>' +
-            '<div class="lbl">要掛哪幾針？（每類選一種，可只選一類）</div><div class="vacs">';
-        showVacs.forEach(function (v) {
-            h += '<button class="vb ' + v.fam + (v.kid ? ' kid' : '') + (picked[v.fam] === v.key ? ' on' : '') + '" data-vac="' + esc(v.key) + '">' +
-                esc(v.key) + '<small>' + esc(v.name) + '</small></button>';
-        });
-        var keys = pickedKeys();
-        h += '</div><button class="copy" data-act="copy"' + (pid ? '' : ' disabled') + '>📋 複製「' +
-            esc(pid || '身分證') + (keys.length ? ' ' + esc(keys.join(',')) : '') + '」' + (keys.length ? '' : '<small>（未選類別＝只複製身分證）</small>') + '</button>' +
-            '<div class="sub">複製後切到掛號平台，打開「現場掛號」在身分證欄按 Ctrl+V，身分證與疫苗會自動填好（掛號仍由你按）。</div>';
+            '<button class="copy" data-act="copyId"' + (pid ? '' : ' disabled') + '>📋 複製身分證「' + esc(pid || '—') + '」</button>' +
+            '<div class="sub">複製後到掛號平台「現場掛號」的身分證欄按 Ctrl+V，再勾類別、按掛號。</div>';
         body.innerHTML = h;
     }
 
@@ -305,18 +273,12 @@
     function dragUp() { dragOn = false; }
 
     function onPanelClick(e) {
-        var t = e.target.closest ? e.target.closest('[data-act],[data-vac]') : e.target;
+        var t = e.target.closest ? e.target.closest('[data-act]') : e.target;
         if (!t) return;
         var act = t.getAttribute('data-act');
         if (act === 'close') return close();
-        if (act === 'refresh') { picked = {}; render(); return; }
-        if (act === 'copy') { copyText((pid + ' ' + pickedKeys().join(',')).trim(), t); return; }
-        if (act === 'copyId') { copyText(pid, t); return; }
-        var vac = t.getAttribute('data-vac');
-        if (vac) {
-            VACS.forEach(function (v) { if (v.key === vac) picked[v.fam] = picked[v.fam] === v.key ? undefined : v.key; });
-            render();
-        }
+        if (act === 'refresh') { render(); return; }
+        if (act === 'copyId' && pid) { copyText(pid, t); return; }
     }
 
     function unmount() {
@@ -347,7 +309,7 @@
         panel.innerHTML =
             '<div class="qh"><b>💉 最近接種（新冠／流感）</b><button data-act="refresh" title="重新讀取畫面">↻</button><button data-act="close" title="關閉（再點書籤也可關閉）">✕</button></div>' +
             '<div class="qb" data-role="body"></div>' +
-            '<div class="ft">' + VERSION + '｜唯讀・只複製身分證＋類別到剪貼簿・不保存</div>';
+            '<div class="ft">' + VERSION + '｜唯讀・只複製身分證到剪貼簿・不保存</div>';
         host.body.appendChild(panel);
         panel.addEventListener('click', onPanelClick);
         panel.querySelector('.qh').addEventListener('mousedown', function (e) {
