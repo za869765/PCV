@@ -1,9 +1,10 @@
 /*
- * 快速掛號（v1.2）— 臺南市流感疫苗預約平台「報到作業」頁輔助工具
+ * 快速掛號（v1.3）— 臺南市流感疫苗預約平台「報到作業」頁輔助工具
  *
  * 用途：先點選類別（Flu／XFG…，會保留到你改為止），再輸入身分證按 Enter：
  *   - 本場次未掛 → 自動打開平台的「現場掛號」視窗並填好身分證＋類別，由使用者檢查後自己按確認
  *   - 本場次已掛 → 顯示已掛類別與是否報到，不重複開視窗
+ *   - 「現場掛號」身分證欄填好時，讀剪貼簿裡「💉 NIIS 最近接種」書籤放的身分證比對：不同人 → 全螢幕紅色警告
  * 安全設計：
  *   - 不會自行送出任何掛號／報到／退掛：只幫忙「填好視窗」，送出一律由使用者在平台視窗按確認
  *   - 不讀取、不保存任何帳號密碼或登入憑證；不自行呼叫平台 API
@@ -14,7 +15,8 @@
 (function () {
     'use strict';
     var PANEL_ID = 'qkl-panel';
-    var VERSION = 'v1.2';
+    var VERSION = 'v1.3';
+    var CLIP_TYPE = 'web application/x-niis-id';   // NIIS 書籤放進剪貼簿的標記格式（內容 {id,name,ts}）
 
     var old = document.getElementById(PANEL_ID);
     if (old) { if (old._qklClose) old._qklClose(); else old.remove(); return; }   // 再點一次書籤＝關閉
@@ -101,7 +103,25 @@
         '#qkl-panel .chip.flu{background:#2563eb}#qkl-panel .chip.cov{background:#dc2626}#qkl-panel .chip.pcv{background:#ea580c}#qkl-panel .chip.oth{background:#6b7280}' +
         '#qkl-panel .sub{color:#94a3b8;font-size:11.5px}' +
         '#qkl-panel .lk{color:#1565c0;cursor:pointer;text-decoration:underline;font-size:12px;white-space:nowrap}' +
-        '#qkl-panel .ft{font-size:11px;color:#94a3b8;text-align:right;padding:4px 12px 8px}';
+        '#qkl-panel .ft{font-size:11px;color:#94a3b8;text-align:right;padding:4px 12px 8px}' +
+        '#qkl-niis{margin:0 0 6px;border-radius:8px;padding:7px 12px;font:700 15px/1.4 "Noto Sans TC","Microsoft JhengHei",sans-serif}' +
+        '#qkl-niis.ok{background:#dcfce7;color:#166534;border:2px solid #22c55e}#qkl-niis.bad{background:#dc2626;color:#fff;border:2px solid #991b1b;animation:qklPulse 1s 3}#qkl-niis.calm{animation:none}#qkl-niis .when{font-weight:400;font-size:12.5px;margin-left:4px}' +
+        '#qkl-niis.unk{background:#f1f5f9;color:#475569;border:2px dashed #94a3b8;font-weight:400;font-size:13px}' +
+        '#qkl-alert{position:fixed;inset:0;z-index:2147483647;background:rgba(127,29,29,.55);display:flex;align-items:center;justify-content:center;animation:qklFade .2s ease-out;font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif}' +
+        '#qkl-alert .box{background:#fff;border-radius:18px;padding:22px 28px;width:min(560px,92vw);border:5px solid #dc2626;text-align:center;animation:qklShake .55s ease-in-out 2}' +
+        '#qkl-alert h2{margin:0 0 6px;color:#b91c1c;font-size:28px;font-weight:900}' +
+        '#qkl-alert .act{font-size:17px;font-weight:800;color:#0f172a;margin-bottom:10px}' +
+        '#qkl-alert .row{display:flex;align-items:center;gap:12px;background:#f8fafc;border-radius:10px;padding:8px 14px;margin:8px 0;text-align:left}' +
+        '#qkl-alert .row .k{width:118px;font-size:14px;color:#64748b;font-weight:700}' +
+        '#qkl-alert .row .v{font:900 26px/1.3 Consolas,"Courier New",monospace;letter-spacing:2px;color:#0f172a}' +
+        '#qkl-alert .row .nm{font-size:16px;font-weight:700;color:#334155;margin-left:8px;letter-spacing:1px;font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif}' +
+        '#qkl-alert .v i{font-style:normal;background:#fecaca;color:#b91c1c;border-radius:4px;padding:0 1px}' +
+        '#qkl-alert p{color:#475569;font-size:14.5px;margin:12px 0 16px}' +
+        '#qkl-alert button{border:none;border-radius:10px;padding:10px 34px;min-width:220px;font:inherit;font-size:20px;font-weight:800;color:#fff;background:#dc2626;cursor:pointer}' +
+        '@keyframes qklShake{0%,100%{transform:translateX(0)}15%,55%{transform:translateX(-14px)}35%,75%{transform:translateX(14px)}}' +
+        '@keyframes qklPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.6)}50%{box-shadow:0 0 0 14px rgba(220,38,38,0)}}' +
+        '@keyframes qklFade{from{opacity:0}to{opacity:1}}' +
+        '@media (prefers-reduced-motion:reduce){#qkl-alert,#qkl-alert .box,#qkl-niis{animation:none!important}}';
     document.head.appendChild(css);
 
     var panel = document.createElement('div');
@@ -229,6 +249,8 @@
     function close() {
         unwatch.forEach(function (f) { f(); });
         document.removeEventListener('paste', onDialogPaste, true);
+        watchDialog(false);
+        window.removeEventListener('focus', onFocusBack);
         document.removeEventListener('mousemove', dragMove);
         document.removeEventListener('mouseup', dragUp);
         ids = [];
@@ -338,6 +360,135 @@
     }
     document.addEventListener('paste', onDialogPaste, true);
 
+    // ── 與 NIIS 比對：讀剪貼簿裡「💉 NIIS 最近接種」書籤放的身分證（含 NIIS 標記），跟現場掛號視窗的身分證比 ──
+    var NIIS_FRESH_MIN = 20;           // NIIS 標記 20 分鐘內才比對（NIIS 換人會自動重寫，超過代表太久沒更新）
+    var niisTimer = null, alerted = '', dlgUnwatch = null, niisBadMsg = false, checkSeq = 0, dlgGen = 0;
+    var ID_RE = /^[A-Z][A-Z0-9]\d{8}$/;
+    function readNiisClip() {
+        var nav = navigator;
+        if (!nav.clipboard || !nav.clipboard.read) return Promise.reject(new Error('瀏覽器不支援讀取剪貼簿'));
+        return nav.clipboard.read().then(function (items) {
+            var it = items[0];
+            if (!it) return null;
+            if (it.types.indexOf(CLIP_TYPE) >= 0) {
+                return it.getType(CLIP_TYPE).then(function (b) { return b.text(); }).then(function (t) {
+                    var o = JSON.parse(t), id = String(o.id || '').toUpperCase(), ts = Number(o.ts);
+                    if (!ID_RE.test(id) || !isFinite(ts)) return null;
+                    return { id: id, name: String(o.name || ''), ts: ts, marked: true };
+                });
+            }
+            return { marked: false };   // 沒有 NIIS 標記（一般複製的文字）→ 不當作 NIIS 證據
+        });
+    }
+    function setBanner(cls, html) {
+        var old = document.getElementById('qkl-niis');
+        if (!cls) { if (old) old.remove(); return; }
+        var card = document.querySelector('.v-dialog--active .v-card__text') || document.querySelector('.v-dialog--active .v-card');
+        if (!card) return;
+        var el = old || document.createElement('div');
+        el.id = 'qkl-niis';
+        el.className = cls;
+        el.innerHTML = html;
+        if (el.parentNode !== card) card.insertBefore(el, card.firstChild);
+    }
+    function diffHtml(a, b) {
+        return a.split('').map(function (ch, i) { return ch === b.charAt(i) ? esc(ch) : '<i>' + esc(ch) + '</i>'; }).join('');
+    }
+    var alertEl = null, alertBack = null;
+    function trapKeys(e) {
+        // 警告期間鍵盤一律不傳給平台（避免被當成條碼掃描）；Tab 不讓焦點跑出去；放開 Enter／Esc 才關閉
+        if (!alertEl) return;
+        e.stopPropagation();
+        if (e.key === 'Tab' || e.key === 'Enter' || e.key === 'Escape') e.preventDefault();
+        if (e.type === 'keyup' && (e.key === 'Enter' || e.key === 'Escape')) closeAlert();
+    }
+    function closeAlert() {
+        if (!alertEl) return;
+        alertEl.remove();
+        alertEl = null;
+        setTimeout(function () {   // 等這次按鍵事件結束再解除攔截
+            ['keydown', 'keypress', 'keyup'].forEach(function (ev) { window.removeEventListener(ev, trapKeys, true); });
+        }, 0);
+        if (alertBack && alertBack.focus) alertBack.focus();
+        var b = document.getElementById('qkl-niis');
+        if (b) b.classList.add('calm');   // 關掉大警告後，視窗內紅條停止閃爍
+    }
+    function showAlert(inId, n) {
+        if (alertEl) alertEl.remove();
+        var r = listIndex()[inId];
+        alertBack = document.activeElement;
+        alertEl = document.createElement('div');
+        alertEl.id = 'qkl-alert';
+        alertEl.setAttribute('role', 'alertdialog');
+        alertEl.innerHTML = '<div class="box"><h2>⚠ 跟 NIIS 不是同一人！</h2>' +
+            '<div class="act">→ 請改讀正確的健保卡，或修正身分證</div>' +
+            '<div class="row"><span class="k">NIIS 畫面</span><span class="v">' + diffHtml(n.id, inId) + '</span>' + (n.name ? '<span class="nm">' + esc(n.name) + '</span>' : '') + '</div>' +
+            '<div class="row"><span class="k">現場掛號輸入</span><span class="v">' + diffHtml(inId, n.id) + '</span>' + (r && r['姓名'] ? '<span class="nm">' + esc(r['姓名']) + '</span>' : '') + '</div>' +
+            '<p>紅底字＝兩邊不一樣的地方</p>' +
+            '<button data-act="ok">我知道了（Enter）</button></div>';
+        alertEl.addEventListener('click', function (e) { if (e.target === alertEl || e.target.getAttribute('data-act') === 'ok') closeAlert(); });
+        ['keydown', 'keypress', 'keyup'].forEach(function (ev) { window.addEventListener(ev, trapKeys, true); });
+        document.body.appendChild(alertEl);
+        alertEl.querySelector('button').focus();
+    }
+    function dialogId() {
+        var dlg = vm && vm.dialog ? findWalkinDialog() : null;
+        return dlg ? String(dlg['身分證字號'] || '').trim().toUpperCase() : '';
+    }
+    function clearBad() {
+        closeAlert();
+        alerted = '';
+        if (niisBadMsg) { niisBadMsg = false; setMsg(); }
+    }
+    function checkNiis(raw) {
+        clearTimeout(niisTimer);
+        var seq = ++checkSeq;   // 每次輸入一個序號：較晚回來的舊結果不會蓋掉新結果
+        var id = String(raw || '').trim().toUpperCase();
+        if (!ID_RE.test(id)) { setBanner(); clearBad(); return; }
+        setBanner('unk', '與 NIIS 比對中…');
+        niisTimer = setTimeout(function () {
+            readNiisClip().then(function (n) {
+                if (seq !== checkSeq || dialogId() !== id) return;
+                if (!n || !n.marked) { clearBad(); setBanner('unk', '剪貼簿沒有 NIIS 標記，未比對（請在 NIIS 開「💉 NIIS 最近接種」書籤）'); return; }
+                var mins = Math.round((Date.now() - n.ts) / 60000);
+                if (mins > NIIS_FRESH_MIN || mins < -5) { clearBad(); setBanner('unk', 'NIIS 剪貼簿資料是 ' + mins + ' 分鐘前的，未比對（NIIS 換人會自動更新，請確認 NIIS 書籤開著）'); return; }
+                var who = (n.name ? esc(n.name) + ' ' : '') + esc(n.id), ago = mins < 1 ? '剛剛' : mins + ' 分鐘前';
+                if (n.id === id) {
+                    clearBad();
+                    setBanner('ok', '✅ 與 NIIS 同一人：' + who + '<span class="when">（NIIS ' + ago + '）</span>');
+                    return;
+                }
+                setBanner('bad', '⚠ 與 NIIS 不同人！NIIS 是 ' + who);
+                niisBadMsg = true;
+                setMsg('err', '⚠ 現場掛號 ' + esc(id) + ' 與 NIIS 畫面 ' + who + ' 不同人');
+                if (alerted !== id + '|' + n.id) { alerted = id + '|' + n.id; showAlert(id, n); }
+            }, function (err) {
+                if (seq !== checkSeq || dialogId() !== id) return;
+                clearBad();
+                setBanner('unk', '無法讀取剪貼簿比對 NIIS（' + esc((err && err.message) || '未允許') + '）；網址列右側若出現剪貼簿圖示請按「允許」');
+            });
+        }, 250);
+    }
+    // 回到掛號平台（例如剛在 NIIS 換人）→ 視窗開著就重新比對（序號會擋掉較舊的結果）
+    function onFocusBack() {
+        var id = dialogId();
+        if (ID_RE.test(id)) checkNiis(id);
+    }
+    // 現場掛號視窗打開 → 監看身分證欄（打字、掃條碼、貼上、書籤自動填入都會觸發）
+    function watchDialog(on) {
+        var gen = ++dlgGen;
+        if (dlgUnwatch) { dlgUnwatch(); dlgUnwatch = null; }
+        clearTimeout(niisTimer);
+        checkSeq++;
+        if (!on) { setBanner(); clearBad(); return; }
+        vm.$nextTick(function () {
+            if (gen !== dlgGen || !vm.dialog) return;
+            var dlg = findWalkinDialog();
+            if (dlg) dlgUnwatch = dlg.$watch('身分證字號', checkNiis, { immediate: true });
+        });
+    }
+    window.addEventListener('focus', onFocusBack);
+
     // 拖曳面板
     var dragOn = false, sx, sy, ox, oy;
     $('.qh').addEventListener('mousedown', function (e) {
@@ -361,6 +512,8 @@
         unwatch.push(vm.$watch(function () { return vm.selected && vm.selected['場次']; }, function () { ids = []; setMsg(); renderList(); }));
         // 現場掛號視窗關閉後，游標回到面板輸入框，可直接輸入下一位
         unwatch.push(vm.$watch('dialog', function (on) { if (!on) setTimeout(function () { scan.focus(); }, 300); }));
+        unwatch.push(vm.$watch('dialog', watchDialog));
+        if (vm.dialog) watchDialog(true);
     }
     renderVacs();
     renderList();
