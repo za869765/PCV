@@ -1598,6 +1598,82 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     opacity: 0.5;
 }
 
+/* v6.5：處理完的列綠閃 →（只顯示待處理時）滑出消除 */
+.flu-row.just-fixed {
+    animation: fixedFlash 0.9s ease-out;
+}
+
+@keyframes fixedFlash {
+    0%   { background-color: #c8e6c9; box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.35); }
+    100% { background-color: transparent; box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+}
+
+.flu-row.vanish {
+    overflow: hidden;
+    animation: rowVanish 0.6s ease forwards;
+}
+
+@keyframes rowVanish {
+    0%   { opacity: 1; max-height: 60px; transform: translateX(0); }
+    60%  { opacity: 0; max-height: 60px; transform: translateX(28px); }
+    100% { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; transform: translateX(28px); }
+}
+
+.flu-row.hidden-done {
+    display: none;
+}
+
+/* v6.5：流感待處理計數＋暫存狀態 */
+.pending-chip {
+    font-size: 0.85rem;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 2px 10px;
+    background: #ffebee;
+    color: #c62828;
+    border: 1px solid #ef9a9a;
+    transition: all 0.3s ease;
+}
+
+.pending-chip.done {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-color: #a5d6a7;
+}
+
+.pending-chip.bump {
+    animation: chipBump 0.45s var(--ease-out-back);
+}
+
+@keyframes chipBump {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.18); }
+    100% { transform: scale(1); }
+}
+
+.flu-all-done {
+    text-align: center;
+    color: #2e7d32;
+    font-weight: 600;
+    padding: 18px 0;
+    animation: fadeUpIn 0.4s var(--ease-out-quart) both;
+}
+
+.draft-note {
+    font-size: 12.5px;
+    color: #64748b;
+}
+
+.flu-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: #334155;
+    cursor: pointer;
+    user-select: none;
+}
+
 /* 外設站切換鈕 */
 .exp-toggle {
     border: 2px solid #2196f3;
@@ -2109,7 +2185,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 <div id="exportBody"></div>
             </div>
             <div class="custom-modal-footer">
-                <button class="modal-btn modal-btn-secondary" onclick="closeExport()">取消</button>
+                <button class="modal-btn modal-btn-secondary" data-tip="關閉面板&#10;個別拉選已自動暫存，下次開啟會帶回" onclick="closeExport()">取消</button>
                 <button class="modal-btn modal-btn-primary" data-tip="產生媒體資料上傳檔（Big5 CSV）並下載&#10;（拉選偏好會自動儲存供下次使用）" onclick="generateNiisFile()">產生並下載</button>
             </div>
         </div>
@@ -2173,7 +2249,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.4</div>
+    <div class="version-tag">v6.5</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2368,10 +2444,14 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         var expOutpost = false;   // 本場為外設站（流感預設 F03A↔F03B；每次開面板重設為所內）
 
-        // 預設接種日期：今天或過去最近的禮拜四（當天是週四即押當天）
-        function defaultThursdayISO() {
+        // v6.5：流感名單「只顯示待處理」篩選＋待處理計數（開面板時依有無待處理自動決定預設）
+        var fluOnlyPending = false;
+        var fluFilterAuto = true;
+        var fluPendingCount = 0;
+
+        // v6.5：預設接種日期＝當天（仍可於面板左上角手動改選）
+        function todayISO() {
             var d = new Date();
-            d.setDate(d.getDate() - ((d.getDay() - 4 + 7) % 7));   // 4 = 星期四
             return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
         }
 
@@ -2540,9 +2620,95 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             refreshExpiryMarks();      // 針劑效期⚠／紅標同步（原地刷新不重繪）
         }
 
+        /* ===== v6.5：個別拉選自動暫存（瀏覽器 localStorage；同一組檔案才帶回，7 天過期） ===== */
+        var DRAFT_KEY = 'pcvExportDraft';
+        var DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+        var draftSavedAt = 0;
+
+        // 檔案組合簽章：NIIS＋三個 HIS 檔的檔名與大小（換檔＝不同批名單，不帶回舊暫存）
+        function draftSig() {
+            return [currentFile, phisFiles.k, phisFiles.z, phisFiles.v].map(function(f) {
+                return f ? f.name + ':' + f.size : '-';
+            }).join('|');
+        }
+
+        function draftPickCount() {
+            var n = Object.keys(fluPersonCodes).length;
+            ['k', 'z', 'v'].forEach(function(s) { n += Object.keys(slotPersonBatch[s] || {}).length; });
+            return n;
+        }
+
+        function saveExportDraft() {
+            try {
+                if (draftPickCount() === 0) {
+                    localStorage.removeItem(DRAFT_KEY);
+                    draftSavedAt = 0;
+                } else {
+                    draftSavedAt = Date.now();
+                    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+                        sig: draftSig(), t: draftSavedAt,
+                        fluCodes: fluPersonCodes, personBatch: slotPersonBatch
+                    }));
+                }
+            } catch (e) {
+                // 瀏覽器不允許儲存時照常運作（只是重新整理後不會帶回）
+            }
+            updateDraftNote();
+        }
+
+        // 拉選變動即存（先把畫面值讀回記憶體）
+        function autoSaveDraft() {
+            if (exportModalOpen()) collectExportInputs();
+            saveExportDraft();
+        }
+
+        // 記憶體沒有拉選（例如重新整理頁面後）且檔案組合相同時，帶回暫存；回傳帶回筆數
+        function restoreExportDraft() {
+            if (draftPickCount() > 0) return 0;
+            var d = null;
+            try { d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { d = null; }
+            if (!d) return 0;
+            if (!d.t || Date.now() - d.t > DRAFT_TTL_MS) {
+                try { localStorage.removeItem(DRAFT_KEY); } catch (e2) {}
+                return 0;
+            }
+            if (d.sig !== draftSig()) return 0;
+            fluPersonCodes = d.fluCodes || {};
+            var pb = d.personBatch || {};
+            slotPersonBatch = { k: pb.k || {}, z: pb.z || {}, v: pb.v || {} };
+            draftSavedAt = d.t;
+            return draftPickCount();
+        }
+
+        function updateDraftNote() {
+            var el = document.getElementById('draftNote');
+            if (!el) return;
+            if (draftSavedAt) {
+                var t = new Date(draftSavedAt);
+                el.textContent = '💾 已自動暫存 ' + ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) +
+                    '（' + draftPickCount() + ' 筆個別拉選）';
+            } else {
+                el.textContent = '💾 個別拉選會自動暫存，關閉或重新整理都不會遺失';
+            }
+        }
+
+        function clearExportDraft() {
+            showConfirm('清除暫存', '將清除本次所有個別拉選（身分別與針劑），恢復預設判讀。\n確定清除？', function() {
+                fluPersonCodes = {};
+                slotPersonBatch = { k: {}, z: {}, v: {} };
+                try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+                draftSavedAt = 0;
+                fluFilterAuto = true;
+                if (exportModalOpen()) renderExport();
+                refreshMainListBadges();
+                showFx('success', '已清除暫存', '個別拉選已全部恢復預設', 1800);
+            }, '🧹');
+        }
+
         // v6.3：面板＝純「套針劑並產檔」——先載名單再繪，只出現當次有名單的疫苗容器
         function openExport() {
             expOutpost = false;   // 每次開面板重設為所內
+            fluFilterAuto = true; // 依有無待處理自動決定「只顯示待處理」
             document.getElementById('exportModal').classList.add('show');
             document.getElementById('exportBody').className = '';
             document.getElementById('exportBody').innerHTML =
@@ -2562,6 +2728,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         }
 
         function closeExport() {
+            if (exportModalOpen() && document.getElementById('expDate')) autoSaveDraft();   // 關閉前再存一次
             document.getElementById('exportModal').classList.remove('show');
         }
 
@@ -2572,7 +2739,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         // ===== 效期防呆（v5.7）：針劑效期早於接種日期 → 選單⚠＋小卡紅標 =====
         function currentRocInt() {
             var iso = (document.getElementById('expDate') || {}).value ||
-                (exportConfig && exportConfig._uiDateIso) || defaultThursdayISO();
+                (exportConfig && exportConfig._uiDateIso) || todayISO();
             var n = parseInt(isoToRoc(iso), 10);
             return isNaN(n) ? null : n;
         }
@@ -2744,12 +2911,17 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var body = document.getElementById('exportBody');
             body.className = slots.length ? ('n' + slots.length) : '';
 
-            // ── 頂列：機構／接種日期（橫跨整排，不佔宮格） ──
+            // ── 頂列：機構／接種日期／暫存狀態（橫跨整排，不佔宮格） ──
             var html = '<div class="exp-topbar">';
             html += '<div class="s-field" data-tip="固定值（佳里區衛生所），僅檢視"><span class="s-cap">接種機構代碼</span><div style="font-weight:600;padding:7px 2px;">' + escAttr(cfg.org || '2341050013') + '</div></div>';
-            html += '<div class="s-field" data-tip="預設＝今天或過去最近的禮拜四&#10;（當天是週四即押當天）&#10;月份會影響流感公費門檻判斷"><span class="s-cap">接種日期</span><input type="date" class="s-input" id="expDate" value="' + escAttr(cfg._uiDateIso || defaultThursdayISO()) + '" onchange="onDateChanged()"></div>';
+            html += '<div class="s-field" data-tip="預設＝當天&#10;可點選改成其他日期&#10;月份會影響流感公費門檻判斷"><span class="s-cap">接種日期</span><input type="date" class="s-input" id="expDate" value="' + escAttr(cfg._uiDateIso || todayISO()) + '" onchange="onDateChanged()"></div>';
             html += '<div class="s-field"><span class="s-cap">民國</span><div style="font-weight:600;padding:7px 2px;font-size:1.05rem;" id="expDateRoc">—</div></div>';
             html += '<div class="s-field s-field-grow" style="color:#94a3b8;font-size:12.5px;padding-bottom:8px;">針劑批號在主頁「匯入針劑」維護；判讀設定在主頁右上 ⚙</div>';
+            if (slots.length) {
+                html += '<div class="s-field" style="padding-bottom:4px;" data-tip="個別拉選（身分別／針劑）每次變動都自動存在這台電腦的瀏覽器&#10;關閉面板或重新整理頁面後，夾回同一組檔案會自動帶回&#10;（7 天後自動失效）">';
+                html += '<div style="display:flex;align-items:center;gap:8px;"><span class="draft-note" id="draftNote"></span>';
+                html += '<button type="button" class="s-btn s-del" onclick="clearExportDraft()">🧹 清除暫存</button></div></div>';
+            }
             html += '</div>';
 
             if (slots.length === 0) {
@@ -2770,6 +2942,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<div class="exp-sec-title">' + sec.icon + ' ' + sec.title +
                     '<span style="font-weight:400;font-size:0.86rem;color:#475569;">' + srcLabel + '｜' + slotPersonList[slot].length + ' 人</span>';
                 if (slot === 'z') {
+                    html += '<span class="pending-chip" id="fluPendingChip" data-tip="紅底＝不符公費門檻且尚未拉選例外身分別&#10;全部處理完才能產檔（進度會自動暫存）"></span>';
                     var fluIn = escAttr((cfg.idCodes || {}).fluIn || 'F03A');
                     var fluOut = escAttr((cfg.idCodes || {}).fluOut || 'F03B');
                     html += '<span style="margin-left:auto;font-size:0.9rem;font-weight:400;color:#475569;">目前設定是：<b style="color:#1565c0;">' +
@@ -2802,6 +2975,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<button type="button" class="s-btn s-copy" onclick="slotCheckAllG(\'' + slot + '\', false)">全不選</button>';
                 if (slot === 'z') {
                     html += '<button type="button" class="s-btn s-del" data-tip="只勾選紅底（不符公費門檻）者" onclick="fluCheckBad()">只選不符</button>';
+                    html += '<label class="flu-filter" data-tip="勾選：只列出紅底待處理者，&#10;處理完的人會綠閃後從清單消除&#10;取消勾選：顯示全部名單"><input type="checkbox" id="fluOnlyPending" onchange="fluOnlyPending=this.checked;applyFluFilter()">只顯示待處理</label>';
                     html += '<select class="s-input" id="fluBatchCode" style="min-width:150px;flex:1;">' + fluOptionsHtml('（批次套用的身分別）') + '</select>';
                     html += '<button type="button" class="s-btn s-copy" data-tip="把左邊選的身分別一次套用到勾選者" onclick="applyFluBatch()">套用身分別</button>';
                     html += '<button type="button" class="s-btn s-copy" data-tip="列印個別拉選（特殊身分別）人員清單&#10;可選排序、含大勾選框核對特殊憑證留存" onclick="printFluSpecialList()">🖨 特殊清單</button>';
@@ -2812,6 +2986,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<button type="button" class="s-btn s-copy" data-tip="把左邊選的針劑一次套用到勾選者&#10;同日多批號時先勾人再套用" onclick="applySlotBatch(\'' + slot + '\')">套用針劑</button>';
                 html += '</div>';
                 html += '<div id="' + (slot === 'z' ? 'expFluList' : 'expList_' + slot) + '"></div>';
+                if (slot === 'z') html += '<div class="flu-all-done" id="fluAllDone" style="display:none;">✅ 待處理已全部完成！（取消「只顯示待處理」可檢視全部名單）</div>';
                 html += '</div>';
                 html += '</div>';
             }
@@ -2835,6 +3010,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             });
 
             updateDateRoc();
+            updateDraftNote();
             slots.forEach(function(s) { renderSlotRows(s); });
         }
 
@@ -2881,7 +3057,14 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         function chkIdOf(slot, i) { return slot === 'z' ? 'fluChk_' + i : 'chk_' + slot + '_' + i; }
         function batSelIdOf(slot, i) { return slot === 'z' ? 'expFluBat_' + i : 'bat_' + slot + '_' + i; }
+        function rowIdOf(slot, i) { return slot === 'z' ? 'fluRow_' + i : 'row_' + slot + '_' + i; }
         function listBoxOf(slot) { return document.getElementById(slot === 'z' ? 'expFluList' : 'expList_' + slot); }
+
+        // v6.5：列被「只顯示待處理」藏起來（或正在消除）＝不參與勾選與批次套用
+        function rowHidden(slot, i) {
+            var row = document.getElementById(rowIdOf(slot, i));
+            return !!(row && (row.classList.contains('hidden-done') || row.classList.contains('vanish')));
+        }
 
         // v6.2：容器名單＝HIS 檔的人 ∪ NIIS 名單該類別的人（去重、依姓名排序；NIIS 的人標記來源）
         // v6.3：載完名單才 renderExport（只出現有名單的類別）
@@ -2918,7 +3101,12 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                         slotPersonList[s] = merged;
                     });
                     fluPersonList = slotPersonList.z;
+                    var restored = restoreExportDraft();   // v6.5：重新整理後帶回同一組檔案的暫存
                     renderExport();
+                    if (restored > 0) {
+                        refreshMainListBadges();
+                        showFx('success', '已帶回暫存', '上次未完成的個別拉選 ' + restored + ' 筆已自動帶回', 2600);
+                    }
                 };
                 var niisText = texts[texts.length - 1];
                 if (!niisText) { finish(null); return; }
@@ -2949,15 +3137,15 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     html += '<input type="checkbox" id="fluChk_' + i + '" style="width:18px;height:18px;flex-shrink:0;">';
                     html += '<span class="flu-name" style="min-width:120px;font-weight:600;" id="fluName_' + i + '">' + escAttr(p.name) + srcTag + '</span>';
                     html += '<span class="flu-hand">👉</span>';
-                    html += '<select class="s-input" id="expFluSel_' + i + '" style="flex:1;min-width:150px;" onchange="updateFluRowStates()">' + idOpts + '</select>';
-                    html += '<select class="s-input" id="expFluBat_' + i + '" style="flex:1;min-width:140px;" data-tip="此人使用的針劑&#10;未拉選＝用上方主選針劑">' + batOpts + '</select>';
+                    html += '<select class="s-input" id="expFluSel_' + i + '" style="flex:1;min-width:150px;" onchange="updateFluRowStates();autoSaveDraft()">' + idOpts + '</select>';
+                    html += '<select class="s-input" id="expFluBat_' + i + '" style="flex:1;min-width:140px;" data-tip="此人使用的針劑&#10;未拉選＝用上方主選針劑" onchange="autoSaveDraft()">' + batOpts + '</select>';
                     html += '</div>';
                 } else {
                     var age = fluAgeOf(p);
                     html += '<div class="flu-row" id="row_' + slot + '_' + i + '">';
                     html += '<input type="checkbox" id="chk_' + slot + '_' + i + '" style="width:18px;height:18px;flex-shrink:0;">';
                     html += '<span class="flu-name" style="min-width:120px;font-weight:600;" data-tip="身分證：' + escAttr(p.id) + (p.birth ? '&#10;出生：' + escAttr(p.birth) : '') + (p.src === 'niis' ? '&#10;來源：NIIS 名單' : '') + '">' + escAttr(p.name) + (age != null ? '（' + age + ' 歲）' : '') + srcTag + '</span>';
-                    html += '<select class="s-input" id="bat_' + slot + '_' + i + '" style="flex:1;min-width:160px;" data-tip="此人使用的針劑&#10;未拉選＝用上方主選針劑">' + batOpts + '</select>';
+                    html += '<select class="s-input" id="bat_' + slot + '_' + i + '" style="flex:1;min-width:160px;" data-tip="此人使用的針劑&#10;未拉選＝用上方主選針劑" onchange="autoSaveDraft()">' + batOpts + '</select>';
                     html += '</div>';
                 }
             }
@@ -2980,14 +3168,22 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     }
                 }
             }
-            if (slot === 'z') updateFluRowStates();
+            if (slot === 'z') {
+                updateFluRowStates();
+                if (fluFilterAuto) {   // 開面板第一次繪製：有待處理就預設只顯示待處理
+                    fluFilterAuto = false;
+                    fluOnlyPending = fluPendingCount > 0;
+                }
+                applyFluFilter();
+            }
         }
 
         function slotCheckAllG(slot, on) {
             var list = slotPersonList[slot];
             for (var i = 0; i < list.length; i++) {
                 var c = document.getElementById(chkIdOf(slot, i));
-                if (c && !c.disabled) c.checked = on;
+                if (!c || c.disabled) continue;
+                c.checked = on && !rowHidden(slot, i);   // 被篩掉的列不勾，避免批次套用誤改看不到的人
             }
         }
 
@@ -2998,20 +3194,80 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var list = slotPersonList[slot];
             for (var i = 0; i < list.length; i++) {
                 var c = document.getElementById(chkIdOf(slot, i));
-                if (c && c.checked) {
+                if (c && c.checked && !rowHidden(slot, i)) {
                     var bs = document.getElementById(batSelIdOf(slot, i));
                     if (bs && !bs.disabled) { bs.value = sel.value; n++; }
                 }
             }
             if (n === 0) { showModal('沒有勾選任何人！請先勾選要套用的對象。'); return; }
+            autoSaveDraft();
             var b = exportConfig.batches[parseInt(sel.value, 10)];
             showFx('success', '已套用針劑', (b ? b.type + '｜' + b.lot : '') + '　共 ' + n + ' 人', 2000);
         }
 
-        // 依門檻/日期/拉選狀態更新每列：紅底＋浮標原因＋姓名旁年齡
+        // v6.5：列從紅底變正常 → 綠閃；「只顯示待處理」時接著滑出消除
+        function fixRowFx(row) {
+            row.classList.remove('just-fixed');
+            void row.offsetWidth;
+            row.classList.add('just-fixed');
+            if (!fluOnlyPending) return;
+            setTimeout(function() {
+                if (row.getAttribute('data-bad') === '1' || !fluOnlyPending) return;
+                row.classList.add('vanish');
+                setTimeout(function() {
+                    row.classList.remove('vanish');
+                    if (row.getAttribute('data-bad') === '1' || !fluOnlyPending) return;
+                    row.classList.add('hidden-done');
+                    var chk = row.querySelector('input[type="checkbox"]');
+                    if (chk) chk.checked = false;
+                    updateFluAllDone();
+                }, 600);
+            }, 700);
+        }
+
+        // 套用「只顯示待處理」篩選到全部流感列（不帶動畫）
+        function applyFluFilter() {
+            var cb = document.getElementById('fluOnlyPending');
+            if (cb) cb.checked = fluOnlyPending;
+            for (var i = 0; i < fluPersonList.length; i++) {
+                var row = document.getElementById('fluRow_' + i);
+                if (!row) continue;
+                row.classList.remove('vanish');
+                var hide = fluOnlyPending && row.getAttribute('data-bad') !== '1';
+                row.classList.toggle('hidden-done', hide);
+                if (hide) {
+                    var chk = document.getElementById('fluChk_' + i);
+                    if (chk) chk.checked = false;
+                }
+            }
+            updateFluAllDone();
+        }
+
+        function updateFluAllDone() {
+            var el = document.getElementById('fluAllDone');
+            if (el) el.style.display = (fluOnlyPending && fluPendingCount === 0 && fluPersonList.length) ? '' : 'none';
+        }
+
+        function updatePendingChip(prev) {
+            var chip = document.getElementById('fluPendingChip');
+            if (!chip) return;
+            chip.textContent = fluPendingCount > 0
+                ? '⚠ 待處理 ' + fluPendingCount + ' 人'
+                : '✅ 全部處理完成';
+            chip.classList.toggle('done', fluPendingCount === 0);
+            if (prev != null && prev !== fluPendingCount) {
+                chip.classList.remove('bump');
+                void chip.offsetWidth;
+                chip.classList.add('bump');
+            }
+        }
+
+        // 依門檻/日期/拉選狀態更新每列：紅底＋浮標原因＋姓名旁年齡（v6.5：待處理計數＋處理完消除）
         function updateFluRowStates() {
             var minAge = currentMinAge();
             var defCode = fluDefaultCode();
+            var prevPending = fluPendingCount;
+            var pending = 0;
             for (var i = 0; i < fluPersonList.length; i++) {
                 var row = document.getElementById('fluRow_' + i);
                 var sel = document.getElementById('expFluSel_' + i);
@@ -3028,7 +3284,15 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     (p.src === 'niis' ? '<i class="src-tag">NIIS</i>' : '');
                 // v6.2：NIIS 名單檔內身分別視同已有代碼（不擋紅底；匯出優先序 拉選＞檔內＞門檻預設）
                 var bad = !sel.value && !p.fcode && (age == null || age < minAge);
+                var wasBad = row.getAttribute('data-bad') === '1';
+                row.setAttribute('data-bad', bad ? '1' : '0');
                 row.classList.toggle('bad', bad);
+                if (bad) {
+                    pending++;
+                    row.classList.remove('hidden-done', 'vanish', 'just-fixed');   // 又變回待處理（如改日期）→ 重新出現
+                } else if (wasBad) {
+                    fixRowFx(row);
+                }
                 var base = '身分證：' + p.id + (p.birth ? '\n出生：' + p.birth : '') +
                     (age != null ? '\n年齡：' + age + ' 歲（只看出生年；7 歲以下算足歲）' : '');
                 if (bad) {
@@ -3043,6 +3307,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     row.setAttribute('data-tip', '個別拉選：' + sel.value + '（特殊身分別）\n' + base);
                 }
             }
+            fluPendingCount = pending;
+            updatePendingChip(prevPending);
+            if (pending > 0) updateFluAllDone();
             refreshMainListBadges();   // 主頁醒目提示同步消長
         }
 
@@ -3060,13 +3327,14 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var n = 0;
             for (var i = 0; i < fluPersonList.length; i++) {
                 var c = document.getElementById('fluChk_' + i);
-                if (c && c.checked) {
+                if (c && c.checked && !rowHidden('z', i)) {
                     var sel = document.getElementById('expFluSel_' + i);
                     if (sel) { sel.value = code; n++; }
                 }
             }
             if (n === 0) { showModal('沒有勾選任何人！請先勾選要套用的對象。'); return; }
             updateFluRowStates();
+            autoSaveDraft();
             showFx('success', '已套用 ' + code, '共 ' + n + ' 人', 1800);
         }
 
@@ -3098,7 +3366,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         // 靜態檢核表 HTML（一鍵列印附頁與寄信 PDF 用；大勾選框＋簽章欄）
         function fluSpecialStaticHtml(rows) {
-            var meta = '接種日期：民國 ' + (currentRocDate() || isoToRoc(defaultThursdayISO())) +
+            var meta = '接種日期：民國 ' + (currentRocDate() || isoToRoc(todayISO())) +
                 '　場次：' + (expOutpost ? '所外' : '所內') + '　共 ' + rows.length + ' 人';
             var h = '<h2 style="text-align:center;margin:0 0 6px;font-size:17px;">流感特殊身分別清單（憑證留存核對）</h2>';
             h += '<div style="text-align:center;color:#555;font-size:13px;margin-bottom:10px;">' + meta + '</div>';
@@ -3479,14 +3747,17 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function generateNiisFile() {
             var picks = collectExportInputs();
             if (!picks) return;
+            saveExportDraft();
             if (!/^\d{7}$/.test(picks.date)) {
                 showModal('請先選擇接種日期！');
                 return;
             }
-            // 流感紅底（不符公費門檻且未拉選）→ 擋下
+            // 流感紅底（不符公費門檻且未拉選）→ 擋下（進度已暫存，可先關閉稍後再處理）
             var badLeft = document.querySelectorAll('.flu-row.bad').length;
             if (badLeft > 0) {
-                showFx('error', '流感名單有 ' + badLeft + ' 人不符公費門檻', '請先為紅底人員拉選例外身分別（可用「只選不符」＋批次套用）', 3600);
+                showFx('error', '流感名單還有 ' + badLeft + ' 人待處理',
+                    '請先為紅底人員拉選例外身分別（可用「只選不符」＋批次套用）\n目前進度已自動暫存，可先關閉稍後再處理', 4000);
+                if (!fluOnlyPending) { fluOnlyPending = true; applyFluFilter(); }
                 var firstBad = document.querySelector('.flu-row.bad');
                 if (firstBad) firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
@@ -3792,7 +4063,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function picksFromMemory() {
             if (!exportConfig) return null;
             var picks = { slots: {}, org: exportConfig.org,
-                          date: isoToRoc(exportConfig._uiDateIso || defaultThursdayISO()),
+                          date: isoToRoc(exportConfig._uiDateIso || todayISO()),
                           fluCodes: fluPersonCodes, personBatch: slotPersonBatch,
                           outpost: expOutpost, rules: exportConfig };
             var lp = exportConfig.lastPick || {};
