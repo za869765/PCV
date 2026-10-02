@@ -11,6 +11,9 @@ Google Apps Script（GAS）Web App 單檔專案。程式碼實際部署在 scrip
 | `index.html` | GAS 前端（現行版） |
 | `legacy/Code.gs` | v2 舊版（四檔比對：JN + PHIS 6Z/6k/6V），v3.0 移除 PHIS 前的原始碼 |
 | `legacy/Index.html` | v2 舊版前端 |
+| `tools/quick-lookup/` | 書籤工具「⚡ 快速掛號」（流感預約平台報到作業頁）：輸入身分證，未掛自動開現場掛號視窗並填好類別，確認由使用者按 |
+| `tools/niis-lastdose/` | 書籤工具「💉 NIIS 最近接種」：讀個案接種紀錄表，列新冠／流感最近接種日，複製「身分證＋類別」給快速掛號貼上 |
+| `tools/build.js` | `node tools/build.js` 產生各工具的 bookmarklet.txt 與 install.html（拖曳安裝頁） |
 
 ## 版本沿革
 
