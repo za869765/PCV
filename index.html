@@ -565,16 +565,68 @@ h1                { animation-delay: 0.05s; }
     transition: background-color 0.2s ease;
 }
 
-/* v6.7.3：名冊姓氏分組——同姓一組、各組交替淡底色、組間加大間距（畫面與列印皆同） */
-.sn-grp {
-    padding: 1px 4px;
-    margin-right: 0.9em;
-    border-radius: 4px;
-    -webkit-box-decoration-break: clone;
-    box-decoration-break: clone;
+/* v6.7.4：名冊「通訊錄式」排版——多欄由上往下；每姓一列（左粗體姓氏、右全名）；名字不斷行；
+   字體大小＝列印字體設定（--pn-size，畫面同步預覽） */
+.roster {
+    column-width: 16em;
+    column-gap: 1.8em;
+    column-rule: 1px solid #e5e7eb;
+    margin: 8px 0 4px;
+    font-size: var(--pn-size, 13px);
+    line-height: var(--pn-lh, 1.7);
 }
 
-.sn-grp.alt { background: #e8eef6; }
+.sn-blk {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+    padding: 2px 0;
+    border-bottom: 1px dotted #d6dbe3;
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.sn-key {
+    flex: 0 0 1.3em;
+    text-align: center;
+    font-weight: 700;
+    color: #475569;
+}
+
+.sn-names {
+    flex: 1;
+    min-width: 0;
+}
+
+.sn-names .nm { white-space: nowrap; }   /* 名字（含後面的頓號）不拆行 */
+
+/* 主頁列印字體調整鈕（一鍵列印旁，有統計結果才顯示） */
+.print-font {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: var(--shadow-medium);
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    color: #334155;
+}
+
+.print-font button {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.print-font button:hover { border-color: #3498db; color: #1565c0; }
+.print-font button.on { background: #1565c0; border-color: #1565c0; color: #fff; }
+.print-font b { min-width: 7.5em; text-align: center; }
 
 .pname:hover {
     background-color: rgba(52, 152, 219, 0.12);
@@ -2151,6 +2203,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     .phis-upload-row,
     .button-group,
     #mainBatchArea,
+    .print-font,
     .divider,
     .modal,
     .custom-modal-overlay,
@@ -2236,22 +2289,16 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         margin-bottom: 10px !important;
     }
 
-    /* v6.7.3：名單字體依人數連續調整（printPage 算好設成變數；10.5～16px 上下限） */
-    #result .section > div {
+    /* v6.7.4：名冊字體＝列印字體設定（自動依人數或使用者自訂） */
+    #result .roster {
         font-size: var(--pn-size, 12px) !important;
         line-height: var(--pn-lh, 1.7) !important;
     }
 
+    #result .sn-blk { padding: 1px 0 !important; }
+
     body.print-dense #result .section {
         margin-bottom: 6px !important;
-    }
-
-    /* 姓氏分組：列印也要印出交替底色與組間距（print 預設不印背景，需 exact） */
-    #result .sn-grp {
-        padding: 1px 4px !important;
-        margin-right: 0.9em !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
     }
 
     /* 長名單段落：允許跨頁並於標題標示 */
@@ -2330,6 +2377,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
             <div class="button-group">
                 <button type="button" class="big-button print-button" id="printButton" onclick="printPage()">一鍵列印</button>
+                <span class="print-font" id="printFontCtl" data-tip="一鍵列印的名冊字體大小&#10;預設依人數自動（人少字大、人多字小）&#10;A−／A＋ 自訂（記在這台電腦），按「自動」恢復&#10;下方名冊會同步預覽大小"><span>🔠 列印字體</span><button type="button" onclick="printFontStep(-0.5)">A−</button><b id="printFontVal"></b><button type="button" onclick="printFontStep(0.5)">A＋</button><button type="button" id="printFontAutoBtn" onclick="printFontReset()">自動</button></span>
                 <button type="button" class="big-button send-button" id="sendButton" onclick="showSendModal()">寄給承辦</button>
                 <button type="button" class="big-button export-button" id="exportButton" data-tip="把名單（NIIS＋HIS）套上針劑批號與身分別&#10;產成媒體資料上傳檔（Big5 CSV）可直接匯入 NIIS" onclick="openExport()">套入針劑與匯出</button>
                 <button type="button" class="big-button stock-button" id="stockButton" data-tip="夾帶 NIIS 結存量(.xls)或庫存量查詢(.xlsx)檔&#10;以檔為準同步：檔裡沒有的視同用完自動刪除&#10;匯入即存試算表「針劑記憶」，免按任何儲存"><input type="file" id="mainStockFiles" accept=".xls,.xlsx,.csv" multiple onchange="importStockFiles()">匯入針劑</button>
@@ -2529,7 +2577,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.7.3</div>
+    <div class="version-tag">v6.7.4</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -4958,6 +5006,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             hasResult = false;
             document.getElementById('result').innerHTML = '';
             document.getElementById('printButton').style.display = 'none';
+            document.getElementById('printFontCtl').style.display = 'none';
             document.getElementById('sendButton').style.display = 'none';
             document.getElementById('blankLine').style.display = 'none';
         }
@@ -4996,6 +5045,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                         displayResult(result.htmlContent);
                         hasResult = true;
                         document.getElementById('printButton').style.display = 'inline-block';
+                        document.getElementById('printFontCtl').style.display = 'inline-flex';
                         document.getElementById('sendButton').style.display = 'inline-block';
                         document.getElementById('blankLine').style.display = 'block';
                         hideFx();  // 統計完成立即呈現數據，不彈完成視窗
@@ -5038,9 +5088,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             refreshMainListBadges();
         }
 
-        // v6.7.3：名冊依姓氏分組（後端已依姓名排序，同姓相鄰）——同姓包成一組、各組交替淡底色、組間加大間距，
-        //         列印對名字時好分段。搬移原本的名字節點（浮標/醒目提示屬性保留）；
-        //         組與組之間放全形空白，寄信 PDF 沒有樣式時名字也不會黏在一起
+        // v6.7.4：名冊改「通訊錄式」排版——多欄由上往下排，每個姓氏一列（左：粗體姓氏；右：該姓全名），
+        //         同姓不跨欄、名字本身不斷行（只在名字之間換行），列間淡虛線分隔。
+        //         搬移原本的名字節點（浮標/醒目提示屬性保留）；寄信 PDF 沒有樣式時每個姓氏仍各自一行
         function groupNamesBySurname() {
             var secs = document.querySelectorAll('#result .section');
             for (var s = 0; s < secs.length; s++) {
@@ -5055,23 +5105,79 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 }
                 if (!spans.length) continue;
                 var frag = document.createDocumentFragment();
-                var cur = null, curKey = null, n = 0;
+                var names = null, curKey = null, prevNm = null;
                 spans.forEach(function(sp) {
                     var key = sp.textContent.trim().charAt(0);   // 姓氏＝名字第一個字
                     if (key !== curKey) {
-                        if (cur) frag.appendChild(document.createTextNode('　'));
-                        cur = document.createElement('span');
-                        cur.className = 'sn-grp' + (n++ % 2 ? ' alt' : '');
-                        frag.appendChild(cur);
+                        var blk = document.createElement('div');
+                        blk.className = 'sn-blk';
+                        var kEl = document.createElement('span');
+                        kEl.className = 'sn-key';
+                        kEl.textContent = key;
+                        names = document.createElement('span');
+                        names.className = 'sn-names';
+                        blk.appendChild(kEl);
+                        blk.appendChild(names);
+                        frag.appendChild(blk);
                         curKey = key;
-                    } else {
-                        cur.appendChild(document.createTextNode('、'));
+                        prevNm = null;
                     }
-                    cur.appendChild(sp);
+                    if (prevNm) prevNm.appendChild(document.createTextNode('、'));   // 頓號黏在前一個名字後面，不會跑到行首
+                    var nm = document.createElement('span');
+                    nm.className = 'nm';
+                    nm.appendChild(sp);
+                    names.appendChild(nm);
+                    names.appendChild(document.createTextNode(' '));   // 名字之間的換行點
+                    prevNm = nm;
                 });
                 box.innerHTML = '';
+                box.removeAttribute('style');
+                box.className = 'roster';
                 box.appendChild(frag);
             }
+            applyPrintFont();
+        }
+
+        /* ===== v6.7.4：列印字體——預設依名冊人數自動（20 人以下 16px、200 人以上 10.5px），
+                  可用「A−／A＋」自訂（9～22px，記在這台電腦），「自動」恢復；畫面名冊同步預覽 ===== */
+        var PF_KEY = 'pcvPrintFont';
+        var PF_MIN = 9, PF_MAX = 22;
+
+        function printFontAuto() {
+            var n = document.querySelectorAll('#result .pname').length;
+            return Math.max(10.5, Math.min(16, 16 - (n - 20) * (5.5 / 180)));
+        }
+
+        function printFontManual() {
+            try {
+                var v = parseFloat(localStorage.getItem(PF_KEY));
+                return isNaN(v) ? null : Math.max(PF_MIN, Math.min(PF_MAX, v));
+            } catch (e) { return null; }
+        }
+
+        function applyPrintFont() {
+            var manual = printFontManual();
+            var size = manual != null ? manual : printFontAuto();
+            var lh = 1.45 + Math.max(0, Math.min(1, (size - 10.5) / 5.5)) * 0.5;   // 字大行距寬、字小行距緊
+            document.body.style.setProperty('--pn-size', size.toFixed(1) + 'px');
+            document.body.style.setProperty('--pn-lh', lh.toFixed(2));
+            var val = document.getElementById('printFontVal');
+            if (val) val.textContent = size.toFixed(1) + 'px' + (manual != null ? '' : '（自動）');
+            var autoBtn = document.getElementById('printFontAutoBtn');
+            if (autoBtn) autoBtn.classList.toggle('on', manual == null);
+        }
+
+        function printFontStep(delta) {
+            var cur = printFontManual();
+            if (cur == null) cur = Math.round(printFontAuto() * 2) / 2;   // 從目前自動值開始調
+            var next = Math.max(PF_MIN, Math.min(PF_MAX, cur + delta));
+            try { localStorage.setItem(PF_KEY, String(next)); } catch (e) {}
+            applyPrintFont();
+        }
+
+        function printFontReset() {
+            try { localStorage.removeItem(PF_KEY); } catch (e) {}
+            applyPrintFont();
         }
 
         /* ===== 異常人員彈窗（重複掛號 / 疫苗衝突） ===== */
@@ -5172,11 +5278,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var names = document.querySelectorAll('#result .pname').length;
             document.body.classList.remove('print-dense', 'print-loose');
             if (names > 100) document.body.classList.add('print-dense');
-            // v6.7.3：字體依人數連續調整——20 人以下 16px、200 人以上 10.5px，中間線性；行距隨字體 1.45～1.95
-            var size = Math.max(10.5, Math.min(16, 16 - (names - 20) * (5.5 / 180)));
-            var lh = 1.45 + (size - 10.5) / 5.5 * 0.5;
-            document.body.style.setProperty('--pn-size', size.toFixed(1) + 'px');
-            document.body.style.setProperty('--pn-lh', lh.toFixed(2));
+            applyPrintFont();   // v6.7.4：自動依人數或使用者自訂
 
             var secs = document.querySelectorAll('#result .section');
             for (var i = 0; i < secs.length; i++) {
