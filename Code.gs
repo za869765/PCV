@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.6.2)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.7)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -145,6 +145,9 @@
  *    雲端暫存逾時先用本機備份）；取消名單列無限動畫改靜態紅底（名單多時卡頓）
  * v6.6.2：年齡規則定案——足歲 7 歲以下（含 7）算到日、超過 7 歲只看年（ageOf；年差 8 生日未到＝7）；
  *    前端加排序（姓名/年齡/身分證/性別/狀態）與性別篩選
+ * v6.7：流感公費門檻改日期區間（fluRule.specialFrom/specialTo，預設 10/1～11/1 滿 65 歲、其他日期滿 50 歲；
+ *    inSpecialPeriod／specialPeriodText；舊 specialMonth 不沿用）；前端加開始前設定彈窗、重置、表頭縮放、
+ *    FluAdj（東洋輔流禦 FLUAD）機構專用預設鎖定
  */
 
 function doGet() {
@@ -607,7 +610,7 @@ function getDefaultNiisExportConfig() {
     covidTable: getDefaultCovidTable(),
     fluCodeTable: getDefaultFluCodeTable(),
     // 流感公費門檻：特別月份（10月）需滿 specialMinAge，其他月份滿 normalMinAge
-    fluRule: { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 },
+    fluRule: { specialFrom: '1001', specialTo: '1101', specialMinAge: 65, normalMinAge: 50 },
     batches: [
       { type: 'CoV_Moderna_LP', lot: '3053857_1150826-CDC', exp: '1150826', family: 'corona' },
       { type: '20PCV', lot: 'ND3093-CDC', exp: '1160430', family: 'lung' },
@@ -772,8 +775,17 @@ function cleanNiisExportConfig(cfg) {
     fluRule: (function(fr) {
       // 允許門檻 0 歲（不限齡），只有空/非數字才回預設
       function num(v, d) { var n = parseInt(v, 10); return isNaN(n) ? d : n; }
+      // v6.7：特別期間改「起迄月日」（MMDD，含頭含尾），預設 10/1～11/1（使用者定案）；
+      //       舊版 specialMonth 設定不再沿用（舊預設 10 月整月會把 11/1 誤判為 50 歲）
+      function mmdd(v) {
+        var s = String(v == null ? '' : v).replace(/\D/g, '');
+        if (s.length === 3) s = '0' + s;
+        var m = parseInt(s.slice(0, 2), 10), d = parseInt(s.slice(2, 4), 10);
+        return (s.length === 4 && m >= 1 && m <= 12 && d >= 1 && d <= 31) ? s : '';
+      }
       return {
-        specialMonth: num(fr.specialMonth, 10) || 10,
+        specialFrom: mmdd(fr.specialFrom) || '1001',
+        specialTo: mmdd(fr.specialTo) || '1101',
         specialMinAge: num(fr.specialMinAge, 65),
         normalMinAge: num(fr.normalMinAge, 50)
       };
@@ -781,7 +793,6 @@ function cleanNiisExportConfig(cfg) {
     batches: [],
     lastPick: {}
   };
-  if (clean.fluRule.specialMonth < 1 || clean.fluRule.specialMonth > 12) clean.fluRule.specialMonth = 10;
   var srcTable = (cfg.covidTable && cfg.covidTable.length === 7) ? cfg.covidTable : def.covidTable;
   for (var t = 0; t < 7; t++) {
     clean.covidTable.push({
@@ -1047,11 +1058,24 @@ function covidIdentityByAge(birthRoc, vacRoc, table) {
   return table[table.length - 1].code;
 }
 
-// 流感公費門檻歲數：接種月份為特別月份（預設10月）→ specialMinAge，否則 normalMinAge
+// 流感公費門檻歲數（v6.7）：接種月日落在特別期間（預設 10/1～11/1，含頭含尾）→ specialMinAge，
+// 其他日期 → normalMinAge（預設 11/2 起 50 歲）。起日大於迄日時視為跨年期間。
+function inSpecialPeriod(vacRoc, fluRule) {
+  var md = parseInt(String(vacRoc || '').slice(3, 7), 10);
+  var from = parseInt(fluRule.specialFrom || '1001', 10), to = parseInt(fluRule.specialTo || '1101', 10);
+  if (isNaN(md)) return false;
+  return from <= to ? (md >= from && md <= to) : (md >= from || md <= to);
+}
+
 function fluMinAge(vacRoc, fluRule) {
-  fluRule = fluRule || { specialMonth: 10, specialMinAge: 65, normalMinAge: 50 };
-  var m = parseInt(String(vacRoc || '').slice(3, 5), 10);
-  return (m === fluRule.specialMonth) ? fluRule.specialMinAge : fluRule.normalMinAge;
+  fluRule = cleanNiisExportConfig({ fluRule: fluRule || {} }).fluRule;
+  return inSpecialPeriod(vacRoc, fluRule) ? fluRule.specialMinAge : fluRule.normalMinAge;
+}
+
+// 期間文字：'1001'～'1101' → '10/1～11/1'
+function specialPeriodText(fluRule) {
+  var f = function(s) { return parseInt(s.slice(0, 2), 10) + '/' + parseInt(s.slice(2, 4), 10); };
+  return f(fluRule.specialFrom) + '～' + f(fluRule.specialTo);
 }
 
 /**
@@ -1194,8 +1218,8 @@ function buildNiisExport(phisFiles, jnContent, picks) {
         return { errorMessage: '新冠名單缺出生日期，無法依年齡判斷身分別，請修正 HIS 檔：' + noBirth.join('、') };
       }
       if (fluBad.length > 0) {
-        return { errorMessage: '流感名單有不符公費門檻者（' + (fluMinAge(date, fluRule) === fluRule.specialMinAge ?
-          fluRule.specialMonth + ' 月需滿 ' + fluRule.specialMinAge : '需滿 ' + fluRule.normalMinAge) +
+        return { errorMessage: '流感名單有不符公費門檻者（' + (inSpecialPeriod(date, fluRule) ?
+          specialPeriodText(fluRule) + ' 需滿 ' + fluRule.specialMinAge : '需滿 ' + fluRule.normalMinAge) +
           ' 歲），請個別拉選例外身分別：' + fluBad.join('、') };
       }
       if (noBatch.length > 0) {
