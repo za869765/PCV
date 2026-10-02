@@ -1760,9 +1760,32 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 .multi-id-more { font-size: 12px; color: #92400e; }
 
 /* v6.8.2：快速設定幼兒區 */
-.setup-sec.setup-kid {
-    background: #f0f9ff;
-    border-color: #bae6fd;
+/* v6.8.4：流感兩種針（老人／幼兒）同框 */
+.setup-flu {
+    background: #eff6ff;
+    border: 1.5px solid #93c5fd;
+    border-radius: 10px;
+    padding: 6px 10px 8px;
+    margin-top: 8px;
+}
+
+.setup-flu-cap {
+    font-weight: 700;
+    color: #1d4ed8;
+    margin-bottom: 2px;
+}
+
+.setup-lbl-sub {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 400;
+    color: #64748b;
+}
+
+.setup-kid-opts {
+    font-size: 13px;
+    color: #334155;
+    margin: 4px 0 2px 110px;
 }
 
 .setup-sec.setup-warn {
@@ -2727,7 +2750,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.8.3</div>
+    <div class="version-tag">v6.8.5</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2992,6 +3015,12 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return inSpecialPeriodJs(roc, r) ? r.specialMinAge : r.normalMinAge;
         }
 
+        // v6.8.5：公費門檻以「年次」表示（成人只看出生年，不看生日）：接種年 − 門檻歲數＝最晚年次
+        function minBirthYearText(roc, minAge) {
+            var y = rocYearOfJs(roc);
+            return y != null ? '民國 ' + (y - minAge) + ' 年次（含）以前出生' : '需滿 ' + minAge + ' 歲（以出生年計）';
+        }
+
         function currentMinAge() {
             return minAgeForRoc(refRocDate());
         }
@@ -3012,7 +3041,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return { y: y, m: m, d: d };
         }
 
-        // 年齡（同後端 ageOf；v6.6.2 使用者定案）：實際足歲 7 歲以下（含 7）算到「日」；超過 7 歲只看「年」
+        // 年齡（同後端 ageOf；v6.8.5 使用者定案）：未滿 7 歲（足歲 0～6）算到「日」；7 歲以上（含 7）只看「年」
         function ageOfJs(birth, vacRoc) {
             var b = parseRocYmdJs(birth), v = parseRocYmdJs(vacRoc);
             if (!b || !v) {   // 解析不了完整日期才退回只看年
@@ -3023,7 +3052,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             if (yd < 0) return null;
             var exact = yd - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
             if (exact < 0) return null;
-            return exact <= 7 ? exact : yd;
+            return exact < 7 ? exact : yd;
         }
 
         function fluAgeOf(p) {
@@ -3084,7 +3113,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                             if (age != null && age >= minAge) {
                                 lines.push('流感身分別：' + fluDefaultCode() + '（預設・' + (expOutpost ? '外設' : '所內') + '）');
                             } else {
-                                lines.push('流感身分別：⚠ 不符公費門檻（需滿 ' + minAge + ' 歲），請至匯出面板拉選');
+                                lines.push('流感身分別：⚠ 不符公費門檻（需 ' + minBirthYearText(refRoc, minAge) + '），請至匯出面板拉選');
                             }
                         }
                     }
@@ -3325,7 +3354,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         function openSetup() {
             setupState = { outpost: expOutpost, batch: {}, review: {}, step: 1,
-                           kidOn: true, kidMax: 6, kidBatch: defaultKidBatch() };   // 幼兒：預設 F01、未滿 7 歲、針劑依廠牌偏好預選
+                           kidOn: true, kidBatch: defaultKidBatch() };   // 幼兒（固定未滿 7 歲）：預設 F01、針劑依廠牌偏好預選
             setSetupStep(1);
             ['k', 'z', 'v'].forEach(function(s) {
                 var sel = document.getElementById('expBatch_' + s);
@@ -3365,8 +3394,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     else bad++;
                 });
                 h += '<div class="setup-sec"><div class="setup-cap">💉 流感公費對象（依接種日期自動判讀）</div>' +
-                    '<div>接種日期在 <b>' + escAttr(periodTextJs(r)) + (special ? ' 期間' : ' 以外') + '</b> → 需滿 <b class="setup-em">' + minAge + ' 歲</b></div>' +
-                    '<div class="setup-note">規則：' + escAttr(periodTextJs(r)) + ' 滿 ' + r.specialMinAge + ' 歲；其他日期滿 ' + r.normalMinAge + ' 歲（主頁 ⚙ 可修改）</div>' +
+                    '<div>接種日期在 <b>' + escAttr(periodTextJs(r)) + (special ? ' 期間' : ' 以外') + '</b> → <b class="setup-em">' + minBirthYearText(roc, minAge) + '</b>（今年滿 ' + minAge + ' 歲的年次）</div>' +
+                    '<div class="setup-note">規則：' + escAttr(periodTextJs(r)) + ' 今年滿 ' + r.specialMinAge + ' 歲、其他日期今年滿 ' + r.normalMinAge + ' 歲（主頁 ⚙ 可修改）。<b>7 歲以上（含 7 歲）只看出生年次，不看生日</b>；幼兒（未滿 7 歲）才看接種日算到日。</div>' +
                     '<div class="setup-note">名單中符合 <b>' + ok + '</b> 人（自動帶預設身分別）；未達門檻 <b style="color:#c62828;">' + bad + '</b> 人（留在待處理，需個別拉選）</div></div>';
 
                 h += '<div class="setup-sec"><div class="setup-cap">🏠 場次（流感預設身分別）</div>' +
@@ -3380,7 +3409,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
             h += '<div class="setup-sec"><div class="setup-cap">💉 主選針劑（各類別所有人的預設批號；效期最近的在上）</div>';
             slots.forEach(function(s) {
-                h += '<div class="setup-row"><span class="setup-lbl">' + NAMES[s] + '</span>' +
+                var isFlu = SLOT_FAMILY[s] === 'flu';
+                // v6.8.4：流感兩種針（老人／幼兒）收在同一個框
+                if (isFlu) h += '<div class="setup-flu"><div class="setup-flu-cap">💉 流感 6Z</div>';
+                h += '<div class="setup-row"><span class="setup-lbl">' + (isFlu ? '👴 老人流感' : NAMES[s]) + '</span>' +
                     '<select class="s-input" style="flex:1;min-width:0;" onchange="setupState.batch[\'' + s + '\'] = parseInt(this.value, 10)">' +
                     '<option value="-1">— 不設定 —</option>';
                 var firstOk = setupUsableIdx(s)[0];
@@ -3390,11 +3422,13 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                         escAttr(batchOptionLabel(bb)) + (bi === firstOk ? '　★效期最近' : '') + '</option>';
                 });
                 h += '</select></div>';
-                if (SLOT_FAMILY[s] === 'flu') h += unlockToggleHtml('flu');   // 機構專用針劑解鎖
+                if (isFlu) {
+                    h += kidRowsHtml();                // 👶 幼兒流感：針劑＋F01＋年齡上限
+                    h += unlockToggleHtml('flu');      // 機構專用針劑解鎖
+                    h += '</div>';
+                }
             });
             h += '</div>';
-
-            h += kidSectionHtml();   // v6.8.2：幼兒一併設定 F01＋幼兒針劑
 
             h += '<div class="setup-sec"><div class="setup-cap">🧾 身分別</div><div class="setup-note">' +
                 '新冠：依年齡自動判讀｜流感：符合門檻者自動帶 <b>' + escAttr(setupState.outpost ? fout : fin) + '</b>，' +
@@ -3581,6 +3615,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         /* ===== v6.8.2：幼兒（流感、未滿 N+1 歲）在快速設定一起批次設定 F01＋幼兒針劑 ===== */
         var KID_CODE = 'F01';
+        var KID_MAX_AGE = 6;   // 幼兒＝未滿 7 歲（0～6 歲），使用者定案固定不改
 
         // v6.8.3：幼兒針劑預選廠牌偏好（使用者定案）——GSK 為主、東洋（Seqirus 一般型）為次；
         //   同廠牌取效期最近；鎖定中的機構專用（FluAdj 東洋輔流禦 FLUAD，佐劑型）不會被預選；
@@ -3602,8 +3637,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         // 幼兒名單：流感、未匯出、年齡 ≤ 上限（預設 6＝未滿 7 歲）
         function kidCandidates() {
             var roc = currentRocDate();
-            var max = parseInt(setupState.kidMax, 10);
-            if (isNaN(max)) max = 6;
+            var max = KID_MAX_AGE;
             var out = [];
             (slotPersonList.z || []).forEach(function(p) {
                 if (exportedIds.z[p.id]) return;
@@ -3613,30 +3647,32 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return out;
         }
 
-        function kidSectionHtml() {
-            if (!(slotPersonList.z || []).length) return '';
+        // v6.8.4：「👶 幼兒流感」列（放在流感框內、老人流感下方）：幼兒針劑＋F01＋年齡上限
+        function kidRowsHtml() {
             var kids = kidCandidates();
-            var max = parseInt(setupState.kidMax, 10);
-            if (isNaN(max)) max = 6;
             var nCode = 0;
             kids.forEach(function(c) { if (!fluPersonCodes[c.p.id] && !c.p.fcode) nCode++; });
-            var h = '<div class="setup-sec setup-kid"><div class="setup-cap">👶 幼兒（流感，未滿 ' + (max + 1) + ' 歲）：' + kids.length + ' 人</div>';
-            h += '<div class="setup-row"><span class="setup-lbl">年齡上限</span>' +
-                '<input class="s-input" type="number" min="0" max="12" style="width:70px;text-align:center;" value="' + max + '" onchange="setupState.kidMax = this.value; renderSetup();">' +
-                '<span class="setup-note" style="margin:0;">歲以下（含）＝ 未滿 ' + (max + 1) + ' 歲</span></div>';
-            if (!kids.length) return h + '<div class="setup-note">名單中沒有這個年齡範圍的幼兒。</div></div>';
-            h += '<label class="setup-row" style="cursor:pointer;"><input type="checkbox"' + (setupState.kidOn ? ' checked' : '') +
-                ' onchange="setupState.kidOn = this.checked; renderSetup();" style="width:18px;height:18px;">' +
-                '<span>身分別一併設為 <b>' + KID_CODE + ' ' + escAttr(setupCodeLabel(KID_CODE)) + '</b>（' + nCode + ' 人；已有身分別的不覆蓋）</span></label>';
-            h += '<div class="setup-row"><span class="setup-lbl">幼兒針劑</span><select class="s-input" style="flex:1;min-width:0;" onchange="setupState.kidBatch = parseInt(this.value, 10)">' +
-                '<option value="-1">— 同成人主選針劑 —</option>';
-            batchIdxByExpiry('flu').forEach(function(bi) {
-                var bb = exportConfig.batches[bi];
-                h += '<option value="' + bi + '"' + (setupState.kidBatch === bi ? ' selected' : '') + (batchLocked(bb) ? ' disabled' : '') + '>' +
-                    escAttr(batchOptionLabel(bb)) + '</option>';
-            });
-            h += '</select></div>';
-            h += '<div class="setup-note">幼兒用的針劑常和成人不同（也可能相同），請依實際選擇；已個別指定針劑的不覆蓋。</div></div>';
+            var h = '<div class="setup-row"><span class="setup-lbl">👶 幼兒流感<small class="setup-lbl-sub">未滿 7 歲・' + kids.length + ' 人</small></span>';
+            if (kids.length) {
+                h += '<select class="s-input" style="flex:1;min-width:0;" onchange="setupState.kidBatch = parseInt(this.value, 10)">' +
+                    '<option value="-1">— 同老人流感針劑 —</option>';
+                batchIdxByExpiry('flu').forEach(function(bi) {
+                    var bb = exportConfig.batches[bi];
+                    h += '<option value="' + bi + '"' + (setupState.kidBatch === bi ? ' selected' : '') + (batchLocked(bb) ? ' disabled' : '') + '>' +
+                        escAttr(batchOptionLabel(bb)) + '</option>';
+                });
+                h += '</select>';
+            } else {
+                h += '<span class="setup-note" style="margin:0;">名單中沒有未滿 7 歲的幼兒</span>';
+            }
+            h += '</div>';
+            if (kids.length) {
+                h += '<div class="setup-kid-opts">';
+                h += '<label style="cursor:pointer;"><input type="checkbox"' + (setupState.kidOn ? ' checked' : '') +
+                    ' onchange="setupState.kidOn = this.checked; renderSetup();" style="width:16px;height:16px;vertical-align:-3px;"> ' +
+                    '身分別一併設為 <b>' + KID_CODE + ' ' + escAttr(setupCodeLabel(KID_CODE)) + '</b>（' + nCode + ' 人；已有身分別的不覆蓋）</label>';
+                h += '</div>';
+            }
             return h;
         }
 
@@ -4536,7 +4572,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var reasons = [], idBad = false;
             if (!ex) {
                 if (slot === 'z' && !code && !p.fcode && (age == null || age < currentMinAge())) {
-                    reasons.push(age == null ? '缺出生日期，請拉選身分別' : '不符公費門檻（需滿 ' + currentMinAge() + ' 歲），請拉選例外身分別');
+                    reasons.push(age == null ? '缺出生日期，請拉選身分別' : '不符公費門檻（需 ' + minBirthYearText(refRocDate(), currentMinAge()) + '），請拉選例外身分別');
                     idBad = true;
                 }
                 if (slot === 'k' && age == null) {
@@ -4624,7 +4660,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function rowTip(slot, info, minAge, defCode) {
             var p = info.p;
             var base = '身分證：' + p.id + (p.birth ? '\n出生：' + p.birth : '') +
-                (info.age != null ? '\n年齡：' + info.age + ' 歲（7 歲以下算到日；8 歲以上只看年）' : '') +
+                (info.age != null ? '\n年齡：' + info.age + ' 歲（未滿 7 歲算到日；7 歲以上只看年次）' : '') +
                 '\n來源：' + (p.src === 'niis' ? 'NIIS 名單' : 'HIS 掛號檔') +
                 (info.batText ? '\n針劑：' + info.batText + (info.ownBatch ? '（個別拉選）' : '（主選）') : '');
             var head;
@@ -4633,7 +4669,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             else if (slot === 'z') {
                 if (info.code) head = '個別拉選：' + info.code + '（特殊身分別）';
                 else if (p.fcode) head = 'NIIS 名單檔內身分別：' + p.fcode + '\n（未另拉選時匯出用此代碼）';
-                else head = '符合公費門檻（需滿 ' + minAge + ' 歲）\n將自動帶預設 ' + defCode;
+                else head = '符合公費門檻（' + minBirthYearText(refRocDate(), minAge) + '）\n將自動帶預設 ' + defCode;
             } else head = slot === 'k' ? '新冠身分別：依年齡自動判讀' : '肺鏈：身分別免填';
             return head + '\n' + base;
         }
@@ -5152,7 +5188,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var hEl = document.querySelector('#ruleModal .custom-modal-header h2');
             if (hEl) hEl.textContent = sc === 'covid' ? '🦠 新冠：身分別自動判讀設定' : '💉 流感：身分別自動判讀設定';
             var cfg = exportConfig;
-            var html = '<div class="settings-help">依接種對象<b>年齡（足歲 7 歲以下算到日；超過 7 歲只看出生年）</b>自動填身分別；' +
+            var html = '<div class="settings-help">依接種對象<b>年齡（未滿 7 歲算到日；7 歲以上（含）只看出生年次）</b>自動填身分別；' +
                 '改完按「儲存設定」存雲端（全所共用），平常不需進來。</div>';
             if (sc === 'covid') {
             html += '<div class="settings-row"><div style="font-weight:600;margin-bottom:8px;">🦠 新冠：年齡對照表</div>';
@@ -5172,8 +5208,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var nfr = normFluRule(cfg.fluRule);   // v6.7：特別期間改起迄月日
             html += '<div class="s-field" data-tip="特別期間起日（月日 4 碼，含當天）&#10;預設 1001＝10/1"><span class="s-cap">特別期間 起</span><input class="s-input" id="ruleFrom" style="width:80px;text-align:center;" value="' + escAttr(nfr.specialFrom) + '"></div>';
             html += '<div class="s-field" data-tip="特別期間迄日（月日 4 碼，含當天）&#10;預設 1101＝11/1；11/2 起改用其他日期門檻"><span class="s-cap">迄</span><input class="s-input" id="ruleTo" style="width:80px;text-align:center;" value="' + escAttr(nfr.specialTo) + '"></div>';
-            html += '<div class="s-field" data-tip="特別期間需滿此歲數（預設 65）"><span class="s-cap">特別期間門檻(歲)</span><input class="s-input" id="ruleSpecAge" type="number" min="0" max="120" style="width:110px;text-align:center;" value="' + escAttr(String(nfr.specialMinAge)) + '"></div>';
-            html += '<div class="s-field" data-tip="其他日期需滿此歲數（預設 50）"><span class="s-cap">其他日期門檻(歲)</span><input class="s-input" id="ruleNormAge" type="number" min="0" max="120" style="width:110px;text-align:center;" value="' + escAttr(String(cfg.fluRule.normalMinAge)) + '"></div>';
+            html += '<div class="s-field" data-tip="特別期間：今年滿此歲數的年次（含）以前（預設 65；只看出生年）"><span class="s-cap">特別期間門檻(歲)</span><input class="s-input" id="ruleSpecAge" type="number" min="0" max="120" style="width:110px;text-align:center;" value="' + escAttr(String(nfr.specialMinAge)) + '"></div>';
+            html += '<div class="s-field" data-tip="其他日期：今年滿此歲數的年次（含）以前（預設 50；只看出生年）"><span class="s-cap">其他日期門檻(歲)</span><input class="s-input" id="ruleNormAge" type="number" min="0" max="120" style="width:110px;text-align:center;" value="' + escAttr(String(cfg.fluRule.normalMinAge)) + '"></div>';
             html += '</div><div style="font-size:12.5px;color:#7f8c8d;margin-top:8px;">年齡不符門檻者會紅底提醒，需個別拉選例外身分別才能產檔。</div></div>';
             // 流感對象別代碼表（附件14，可編輯；名單拉選選單同步使用）
             html += '<div class="settings-row"><div style="font-weight:600;margin-bottom:8px;" data-tip="附件14 對象別代碼對照表&#10;名單「個別拉選」選單就是用這份&#10;可修改代碼/名稱、新增、刪除">💉 流感：對象別代碼表（拉選選單）</div>';

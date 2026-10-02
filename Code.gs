@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.7)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.8.5)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -148,6 +148,8 @@
  * v6.7：流感公費門檻改日期區間（fluRule.specialFrom/specialTo，預設 10/1～11/1 滿 65 歲、其他日期滿 50 歲；
  *    inSpecialPeriod／specialPeriodText；舊 specialMonth 不沿用）；前端加開始前設定彈窗、重置、表頭縮放、
  *    FluAdj（東洋輔流禦 FLUAD）機構專用預設鎖定
+ * v6.8.5：年齡規則定案——未滿 7 歲算到日、7 歲以上（含 7）只看出生年（ageOf：exact < 7）；
+ *    公費門檻錯誤訊息改以年次表示（需民國 X 年次（含）以前出生）
  */
 
 function doGet() {
@@ -1030,7 +1032,7 @@ function parseRocYmd(s) {
   return { y: y, m: m, d: d };
 }
 
-// 年齡（v6.6.2 使用者定案）：實際足歲 7 歲以下（含 7）算到「日」；超過 7 歲只看「年」（接種年−出生年）
+// 年齡（v6.8.5 使用者定案）：未滿 7 歲（足歲 0～6）算到「日」；7 歲以上（含 7）只看「年」（接種年−出生年）
 //   例：年差 8 但生日未到＝足歲 7 → 仍算到日回 7（v6.4 原以年差 >7 判斷會回 8）
 function ageOf(birthRoc, vacRoc) {
   var b = parseRocYmd(birthRoc), v = parseRocYmd(vacRoc);
@@ -1039,7 +1041,7 @@ function ageOf(birthRoc, vacRoc) {
   if (yd < 0) return null;
   var exact = yd - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
   if (exact < 0) return null;
-  return exact <= 7 ? exact : yd;
+  return exact < 7 ? exact : yd;
 }
 
 // v6.4：需提醒確認的掛號代號（XFG-S＝機構內接種專用；容許全形連字號與「代號 - 中文」全文）
@@ -1175,7 +1177,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
         }
         var identity = '';
         if (def.family === 'corona') {
-          // 新冠：一律依年齡自動判斷（足歲 7 歲以下算到日、超過 7 歲只看年，對照表可設定）
+          // 新冠：一律依年齡自動判斷（未滿 7 歲算到日、7 歲以上只看年，對照表可設定）
           identity = covidIdentityByAge(pBirthRaw, date, covidTable);
           if (!identity) {
             probs.push('缺出生日期');
@@ -1219,8 +1221,8 @@ function buildNiisExport(phisFiles, jnContent, picks) {
       }
       if (fluBad.length > 0) {
         return { errorMessage: '流感名單有不符公費門檻者（' + (inSpecialPeriod(date, fluRule) ?
-          specialPeriodText(fluRule) + ' 需滿 ' + fluRule.specialMinAge : '需滿 ' + fluRule.normalMinAge) +
-          ' 歲），請個別拉選例外身分別：' + fluBad.join('、') };
+          specialPeriodText(fluRule) + ' ' : '') + '需民國 ' + (rocYearOf(date) - fluMinAge(date, fluRule)) +
+          ' 年次（含）以前出生，只看出生年），請個別拉選例外身分別：' + fluBad.join('、') };
       }
       if (noBatch.length > 0) {
         return { errorMessage: 'HIS ' + def.expect + ' 有人未分配針劑（個別未拉選且無主選）：' + noBatch.join('、') };
