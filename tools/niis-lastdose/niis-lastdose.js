@@ -1,5 +1,5 @@
 /*
- * NIIS 最近接種（v1.6）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
+ * NIIS 最近接種（v1.7）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
  *
  * 用途：讀健保卡進到個案接種紀錄頁後點書籤，自動從畫面上的接種紀錄表找出
  *       新冠（CoV…）與流感（Flu…）最近一次接種日、距今天數、新冠 84 天間隔與最快可打日（週四）；
@@ -14,7 +14,7 @@
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v1.6';
+    var VERSION = 'v1.7';
 
     var TOP = document, STATE_KEY = '__niisLastDose';
     if (TOP[STATE_KEY]) { TOP[STATE_KEY].close(); return; }   // 再點一次書籤＝關閉
@@ -97,7 +97,7 @@
         docs.forEach(function (doc) {
             Array.prototype.forEach.call(doc.querySelectorAll('table'), function (tb) {
                 diag.tables++;
-                var rows = tb.rows, hi = -1, ci = -1, di = -1, ui = -1;
+                var rows = tb.rows, hi = -1, ci = -1, di = -1, ui = -1, li = -1;
                 for (var r = 0; r < rows.length && r < 5 && hi < 0; r++) {
                     var cells = Array.prototype.map.call(rows[r].cells, txt);
                     var a = colOf(cells, /劑別/), b = colOf(cells, /^接種日(?!期)|^接種日期$/);
@@ -105,7 +105,7 @@
                         var hd = cells.filter(function (c) { return c.length <= 12; }).join('｜');
                         if (hd && diag.heads.indexOf(hd) < 0 && diag.heads.length < 6) diag.heads.push(hd);
                     }
-                    if (a >= 0 && b >= 0) { hi = r; ci = a; di = b; ui = colOf(cells, /接種單位/); }
+                    if (a >= 0 && b >= 0) { hi = r; ci = a; di = b; ui = colOf(cells, /接種單位/); li = colOf(cells, /^批號$/); }
                 }
                 if (hi < 0) return;
                 found = true;
@@ -114,7 +114,7 @@
                     if (c.length <= Math.max(ci, di)) continue;
                     var dt = rocToDate(txt(c[di]));
                     if (!dt) continue;
-                    recs.push({ code: txt(c[ci]), date: dt, unit: ui >= 0 && c[ui] ? txt(c[ui]) : '' });
+                    recs.push({ code: txt(c[ci]), date: dt, unit: ui >= 0 && c[ui] ? txt(c[ui]) : '', lot: li >= 0 && c[li] ? txt(c[li]) : '' });
                 }
             });
         });
@@ -139,6 +139,7 @@
         '#niis-ld-panel .qb{padding:10px 12px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}' +
         '#niis-ld-panel .who{font-size:13px;color:#475569;background:#f1f5f9;border-radius:8px;padding:6px 9px}' +
         '#niis-ld-panel .who b{color:#0f172a;font-size:15px;letter-spacing:1px}' +
+        '#niis-ld-panel .who .nm{font-size:17px;letter-spacing:2px}#niis-ld-panel .who .age{font-size:13px;color:#334155;font-weight:700;margin-top:2px}' +
         '#niis-ld-panel .who .pid{cursor:pointer;border-bottom:1px dashed #64748b}#niis-ld-panel .who .pid:hover{background:#e0f2f1}' +
         '#niis-ld-panel .card{border-radius:10px;padding:8px 11px;border:2px solid}' +
         '#niis-ld-panel .card.cov{border-color:#fca5a5;background:#fef2f2}' +
@@ -148,6 +149,8 @@
         '#niis-ld-panel .card .d{font-size:20px;font-weight:800;color:#0f172a}' +
         '#niis-ld-panel .card .ago{font-size:13px;font-weight:700;color:#334155}' +
         '#niis-ld-panel .sub{color:#64748b;font-size:12px}' +
+        '#niis-ld-panel .brand{display:inline-block;background:#334155;color:#fff;border-radius:6px;padding:0 7px;margin-right:6px;font-size:12.5px;font-weight:700}' +
+        '#niis-ld-panel .brand.unk{background:#e2e8f0;color:#475569;font-weight:400}' +
         '#niis-ld-panel .gap{margin-top:4px;font-size:14px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:6px;padding:3px 8px}' +
         '#niis-ld-panel .gapsub{font-size:11.5px;font-weight:400;margin-left:8px;color:#a16207}' +
         '#niis-ld-panel .tag{display:inline-block;border-radius:999px;padding:0 8px;font-size:12px;font-weight:700;margin-left:6px}' +
@@ -189,7 +192,38 @@
         var n = daysAgo(info.last.date);
         return '<div class="card ' + fam + '"><div class="t">' + title + '（共 ' + info.count + ' 劑）' + (extraTag || '') + '</div>' +
             '<div class="d">' + fmtRoc(info.last.date) + '　<span class="ago">' + agoText(n) + '</span></div>' +
-            '<div class="sub">' + esc(info.last.code) + (info.last.unit ? '｜' + esc(info.last.unit) : '') + '</div>' + (extraLine || '') + '</div>';
+            '<div class="sub">' + brandHtml(info.last) + esc(info.last.code) + (info.last.unit ? '｜' + esc(info.last.unit) : '') + '</div>' + (extraLine || '') + '</div>';
+    }
+
+    // ── 依「劑別代號＋批號命名規則」推估廠牌（與對針系統 BRAND_RULES 同規則；僅供參考） ──
+    var BRAND_RULES = [
+        { brand: '東洋 FLUAD', type: /^FLUADJ/i },
+        { brand: '賽諾菲 高劑量', type: /^FLUHD/i },
+        { brand: '賽諾菲', type: /^FLU/i, lot: /^AFLUA/i },
+        { brand: '國光', type: /^FLU/i, lot: /^P\d/i },
+        { brand: 'GSK', type: /^FLU/i, lot: /^F[A-Z]/i },
+        { brand: 'Seqirus', type: /^FLU/i, lot: /^\d+P\d*$/i },
+        { brand: 'Moderna', type: /MODERNA/i },
+        { brand: 'Novavax', type: /NOVAVAX/i },
+        { brand: 'BNT 輝瑞', type: /BIONTECH|BNT|PFIZER/i },
+        { brand: 'AZ', type: /ASTRA|_AZ/i },
+        { brand: '高端', type: /MEDIGEN|MVC/i }
+    ];
+    function brandOf(rec) {
+        // NIIS 批號可能有括號、-CDC／-hb 撥發尾碼、_日期 尾碼 → 去掉後比對原廠批號
+        var lot = String(rec.lot || '').replace(/[()（）\s]/g, '').replace(/-(CDC|HB)$/i, '').replace(/_\d{6,7}$/, '');
+        for (var i = 0; i < BRAND_RULES.length; i++) {
+            var r = BRAND_RULES[i];
+            if (r.type && !r.type.test(rec.code)) continue;
+            if (r.lot && !r.lot.test(lot)) continue;
+            return { brand: r.brand, lot: lot };
+        }
+        return { brand: '', lot: lot };
+    }
+    function brandHtml(rec) {
+        var b = brandOf(rec);
+        if (b.brand) return '<span class="brand">' + esc(b.brand) + '</span>';
+        return b.lot ? '<span class="brand unk" title="批號判斷不出廠牌">批號 ' + esc(b.lot) + '</span>' : '';
     }
     // 新冠與上一劑需間隔 84 天：回傳 { tag, line }
     var COV_GAP = 84;
@@ -221,11 +255,13 @@
                 (diag.heads.length ? '<br>疑似表頭：' + diag.heads.map(esc).join('<br>') : '｜未見含「劑別／接種」的表頭') + '</div>';
             return;
         }
+        var name = readLabel(docs, /^姓名[:：]?$/);
         var age = '';
         if (birth) {
-            var t = new Date(), a = t.getFullYear() - birth.getFullYear();
-            if (t.getMonth() < birth.getMonth() || (t.getMonth() === birth.getMonth() && t.getDate() < birth.getDate())) a--;
-            age = '｜民國 ' + (birth.getFullYear() - 1911) + ' 年次・' + a + ' 歲';
+            // 足歲到「月」：未滿當月生日的日子不算一個月
+            var t = new Date(), mon = (t.getFullYear() - birth.getFullYear()) * 12 + (t.getMonth() - birth.getMonth());
+            if (t.getDate() < birth.getDate()) mon--;
+            age = '民國 ' + (birth.getFullYear() - 1911) + ' 年次・' + Math.floor(mon / 12) + ' 歲 ' + (mon % 12) + ' 個月';
         }
         var cov = latest(data.recs, isCov), flu = latest(data.recs, isFlu);
         var covGap = covGapInfo(cov);
@@ -234,7 +270,9 @@
         var fluTag = flu.last && flu.last.date >= fluSeasonStart()
             ? '<span class="tag warn">本季（' + (fluSeasonStart().getFullYear() - 1911) + '/10/01 起）已接種</span>'
             : '<span class="tag ok">本季尚未接種</span>';
-        var h = '<div class="who">證號：' + (pid ? '<b class="pid" data-act="copyId" title="點一下複製身分證">' + esc(pid) + ' 📋</b>' : '<b style="color:#b91c1c">讀不到</b>') + esc(age) + '</div>' +
+        var h = '<div class="who">' + (name ? '<b class="nm">' + esc(name) + '</b>　' : '') +
+            '證號：' + (pid ? '<b class="pid" data-act="copyId" title="點一下複製身分證">' + esc(pid) + ' 📋</b>' : '<b style="color:#b91c1c">讀不到</b>') +
+            (age ? '<div class="age">' + esc(age) + '</div>' : '') + '</div>' +
             cardHtml('cov', '🦠 新冠最近一次', cov, covGap.tag, covGap.line) +
             cardHtml('flu', '🤧 流感最近一次', flu, fluTag) +
             '<div class="sub">讀到 ' + data.recs.length + ' 筆已接種紀錄' + (codes.length ? '（代號開頭：' + esc(codes.slice(0, 12).join('、')) + '）' : '') + '</div>' +
