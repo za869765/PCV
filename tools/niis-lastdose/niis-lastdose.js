@@ -9,15 +9,15 @@
  *   - 不讀取、不保存任何帳號密碼或登入憑證；不呼叫任何 API
  *   - 不連線到任何外部網站；只把「身分證＋類別代號」複製到本機剪貼簿（使用者按下才複製）
  *   - 全部程式碼都在書籤內，不從網路載入外部程式
- * 用法：在個案接種紀錄頁點書籤開啟面板；再點一次書籤＝關閉。換下一位（頁面重新載入）後再點一次。
+ * 用法：在 NIIS 點書籤開啟面板（NIIS 是框架頁，面板放在右側內容框架）；換下一位時面板自動更新；再點一次書籤＝關閉。
  */
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v1.1';
+    var VERSION = 'v1.2';
 
-    var old = document.getElementById(PANEL_ID);
-    if (old) { if (old._close) old._close(); else old.remove(); return; }   // 再點一次書籤＝關閉
+    var TOP = document, STATE_KEY = '__niisLastDose';
+    if (TOP[STATE_KEY]) { TOP[STATE_KEY].close(); return; }   // 再點一次書籤＝關閉
 
     var VACS = [
         { key: 'Flu', name: '流感', fam: 'flu' },
@@ -135,9 +135,9 @@
         return { last: hit[0] || null, count: hit.length };
     }
 
+
     // ── 面板 ──
-    var css = document.createElement('style');
-    css.textContent =
+    var CSS_TEXT =
         '#niis-ld-panel{position:fixed;top:60px;right:16px;width:430px;max-height:calc(100vh - 80px);z-index:99999;background:#fff;' +
         'border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.3);font:14px/1.5 "Noto Sans TC","Microsoft JhengHei",sans-serif;color:#1e293b;display:flex;flex-direction:column;overflow:hidden;text-align:left}' +
         '#niis-ld-panel *{box-sizing:border-box}' +
@@ -168,18 +168,31 @@
         '#niis-ld-panel .copy:disabled{background:#94a3b8;cursor:not-allowed}' +
         '#niis-ld-panel .err{color:#b91c1c;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:7px 10px;font-size:13px}' +
         '#niis-ld-panel .ft{font-size:11px;color:#94a3b8;text-align:right;padding:4px 12px 8px}';
-    document.head.appendChild(css);
-
-    var panel = document.createElement('div');
-    panel.id = PANEL_ID;
-    panel.innerHTML =
-        '<div class="qh"><b>💉 最近接種（新冠／流感）</b><button data-act="refresh" title="重新讀取畫面">↻</button><button data-act="close" title="關閉（再點書籤也可關閉）">✕</button></div>' +
-        '<div class="qb" data-role="body"></div>' +
-        '<div class="ft">' + VERSION + '｜唯讀・只複製身分證＋類別到剪貼簿・不保存</div>';
-    document.body.appendChild(panel);
 
     var picked = {};      // fam → key
     var pid = '';
+    var host = null;      // 目前放面板的 document（NIIS 是框架頁：放在右側內容框架）
+    var frameEl = null;   // 內容框架元素（重新載入＝換下一位時自動重掛面板）
+    var panel = null, css = null, mo = null, timer = null;
+
+    // 框架頁（<frameset>）的最外層不顯示任何內容 → 面板要放進有接種紀錄表的框架；找不到就放最大的框架
+    function pickHost() {
+        if (TOP.body && TOP.body.tagName !== 'FRAMESET') return { doc: TOP, frame: null };
+        var best = null, bestScore = -1;
+        (function scan(doc, depth) {
+            if (depth > 4) return;
+            Array.prototype.forEach.call(doc.querySelectorAll('iframe,frame'), function (f) {
+                var d = null;
+                try { d = f.contentDocument; } catch (e) { d = null; }
+                if (!d || !d.body) return;
+                if (d.body.tagName === 'FRAMESET') { scan(d, depth + 1); return; }
+                var hasTable = Array.prototype.some.call(d.querySelectorAll('th,td'), function (c) { return txt(c) === '劑別代號'; });
+                var score = (hasTable ? 1e9 : 0) + f.clientWidth * f.clientHeight;
+                if (score > bestScore) { bestScore = score; best = { doc: d, frame: f }; }
+            });
+        })(TOP, 0);
+        return best || { doc: TOP, frame: null };
+    }
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -196,14 +209,17 @@
     }
 
     function render() {
+        if (!panel) return;
         var docs = allDocs();
-        pid = (readLabel(docs, /^證號[:：]?$/).toUpperCase().match(/[A-Z][A-Z0-9]\d{8}/) || [''])[0];
+        var newPid = (readLabel(docs, /^證號[:：]?$/).toUpperCase().match(/[A-Z][A-Z0-9]\d{8}/) || [''])[0];
+        if (newPid !== pid) picked = {};          // 換人 → 清掉上一位選的類別
+        pid = newPid;
         var birth = rocToDate(readLabel(docs, /^出生日期[:：]?$/));
         var data = readRecords(docs);
         var body = panel.querySelector('[data-role="body"]');
         if (!data.found) {
-            body.innerHTML = '<div class="err">這一頁找不到接種紀錄表（需有「劑別代號」「接種日」欄）。請先進入個案的「預防接種登錄」頁，再點一次書籤或按 ↻。</div>' +
-                '<div class="sub">診斷（不含個資，可截圖給開發者）：網址 ' + esc(location.host + location.pathname) + '｜框架 ' + diag.frames + ' 個（無法讀取 ' + diag.blocked + '）｜表格 ' + diag.tables + ' 個' +
+            body.innerHTML = '<div class="err">這一頁找不到接種紀錄表（需有「劑別代號」「接種日」欄）。請進入個案的「預防接種登錄」頁，面板會自動更新（或按 ↻）。</div>' +
+                '<div class="sub">診斷（不含個資，可截圖給開發者）：網址 ' + esc(host.location.host + host.location.pathname) + '｜框架 ' + diag.frames + ' 個（無法讀取 ' + diag.blocked + '）｜表格 ' + diag.tables + ' 個' +
                 (diag.heads.length ? '<br>疑似表頭：' + diag.heads.map(esc).join('<br>') : '｜未見含「劑別／接種」的表頭') + '</div>';
             return;
         }
@@ -237,28 +253,30 @@
 
     function copyText(s, btn) {
         function done() { btn.textContent = '✅ 已複製，請到掛號平台按 Ctrl+V'; }
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(s).then(done, fallback);
+        var nav = host.defaultView ? host.defaultView.navigator : navigator;
+        if (nav.clipboard && nav.clipboard.writeText) {
+            nav.clipboard.writeText(s).then(done, fallback);
         } else fallback();
         function fallback() {
-            var ta = document.createElement('textarea');
+            var ta = host.createElement('textarea');
             ta.value = s; ta.style.position = 'fixed'; ta.style.opacity = '0';
-            document.body.appendChild(ta); ta.select();
-            try { document.execCommand('copy'); done(); } catch (e) { btn.textContent = '複製失敗，請手動輸入'; }
+            host.body.appendChild(ta); ta.select();
+            try { host.execCommand('copy'); done(); } catch (e) { btn.textContent = '複製失敗，請手動輸入'; }
             ta.remove();
         }
     }
 
-    function close() {
-        if (mo) mo.disconnect();
-        document.removeEventListener('mousemove', dragMove);
-        document.removeEventListener('mouseup', dragUp);
-        panel.remove();
-        css.remove();
+    // 拖曳面板
+    var dragOn = false, sx, sy, ox, oy;
+    function dragMove(e) {
+        if (!dragOn) return;
+        panel.style.left = (ox + e.clientX - sx) + 'px';
+        panel.style.top = (oy + e.clientY - sy) + 'px';
+        panel.style.right = 'auto';
     }
-    panel._close = close;
+    function dragUp() { dragOn = false; }
 
-    panel.addEventListener('click', function (e) {
+    function onPanelClick(e) {
         var t = e.target.closest ? e.target.closest('[data-act],[data-vac]') : e.target;
         if (!t) return;
         var act = t.getAttribute('data-act');
@@ -270,39 +288,74 @@
             VACS.forEach(function (v) { if (v.key === vac) picked[v.fam] = picked[v.fam] === v.key ? undefined : v.key; });
             render();
         }
-    });
-
-    // 拖曳面板
-    var dragOn = false, sx, sy, ox, oy;
-    panel.querySelector('.qh').addEventListener('mousedown', function (e) {
-        if (e.target.tagName === 'BUTTON') return;
-        dragOn = true; sx = e.clientX; sy = e.clientY;
-        var r = panel.getBoundingClientRect(); ox = r.left; oy = r.top;
-        e.preventDefault();
-    });
-    function dragMove(e) {
-        if (!dragOn) return;
-        panel.style.left = (ox + e.clientX - sx) + 'px';
-        panel.style.top = (oy + e.clientY - sy) + 'px';
-        panel.style.right = 'auto';
     }
-    function dragUp() { dragOn = false; }
-    document.addEventListener('mousemove', dragMove);
-    document.addEventListener('mouseup', dragUp);
 
-    // 頁面局部更新（換人但沒整頁重載）時自動重讀；身分證變了才清掉已選類別
-    var mo = null, timer = null;
-    if (window.MutationObserver) {
-        mo = new MutationObserver(function (list) {
-            if (list.every(function (m) { return panel.contains(m.target); })) return;
-            clearTimeout(timer);
-            timer = setTimeout(function () {
-                var before = pid;
-                render();
-                if (pid !== before) { picked = {}; render(); }
-            }, 400);
+    function unmount() {
+        if (mo) { mo.disconnect(); mo = null; }
+        clearTimeout(timer);
+        try {
+            host.removeEventListener('mousemove', dragMove);
+            host.removeEventListener('mouseup', dragUp);
+            panel.remove();
+            css.remove();
+        } catch (e) { /* 框架已換頁，舊 document 已失效 */ }
+        panel = css = null;
+    }
+
+    function mount() {
+        var h = pickHost();
+        host = h.doc;
+        if (h.frame !== frameEl) {
+            if (frameEl) frameEl.removeEventListener('load', onFrameLoad);
+            frameEl = h.frame;
+            if (frameEl) frameEl.addEventListener('load', onFrameLoad);
+        }
+        css = host.createElement('style');
+        css.textContent = CSS_TEXT;
+        (host.head || host.body).appendChild(css);
+        panel = host.createElement('div');
+        panel.id = PANEL_ID;
+        panel.innerHTML =
+            '<div class="qh"><b>💉 最近接種（新冠／流感）</b><button data-act="refresh" title="重新讀取畫面">↻</button><button data-act="close" title="關閉（再點書籤也可關閉）">✕</button></div>' +
+            '<div class="qb" data-role="body"></div>' +
+            '<div class="ft">' + VERSION + '｜唯讀・只複製身分證＋類別到剪貼簿・不保存</div>';
+        host.body.appendChild(panel);
+        panel.addEventListener('click', onPanelClick);
+        panel.querySelector('.qh').addEventListener('mousedown', function (e) {
+            if (e.target.tagName === 'BUTTON') return;
+            dragOn = true; sx = e.clientX; sy = e.clientY;
+            var r = panel.getBoundingClientRect(); ox = r.left; oy = r.top;
+            e.preventDefault();
         });
-        mo.observe(document.body, { childList: true, subtree: true });
+        host.addEventListener('mousemove', dragMove);
+        host.addEventListener('mouseup', dragUp);
+        // 頁面局部更新（沒整頁重載）時自動重讀
+        var W = host.defaultView || window;
+        if (W.MutationObserver) {
+            var p = panel;
+            mo = new W.MutationObserver(function (list) {
+                if (list.every(function (m) { return p.contains(m.target); })) return;
+                clearTimeout(timer);
+                timer = setTimeout(render, 400);
+            });
+            mo.observe(host.body, { childList: true, subtree: true });
+        }
+        render();
     }
-    render();
+
+    // 內容框架換頁（換下一位）→ 自動在新頁面重掛面板
+    function onFrameLoad() {
+        unmount();
+        setTimeout(mount, 200);
+    }
+
+    function close() {
+        unmount();
+        if (frameEl) frameEl.removeEventListener('load', onFrameLoad);
+        frameEl = null;
+        try { delete TOP[STATE_KEY]; } catch (e) { TOP[STATE_KEY] = null; }
+    }
+    TOP[STATE_KEY] = { close: close };
+
+    mount();
 })();
