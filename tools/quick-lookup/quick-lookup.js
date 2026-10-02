@@ -1,5 +1,5 @@
 /*
- * 快速掛號（v1.1）— 臺南市流感疫苗預約平台「報到作業」頁輔助工具
+ * 快速掛號（v1.2）— 臺南市流感疫苗預約平台「報到作業」頁輔助工具
  *
  * 用途：先點選類別（Flu／XFG…，會保留到你改為止），再輸入身分證按 Enter：
  *   - 本場次未掛 → 自動打開平台的「現場掛號」視窗並填好身分證＋類別，由使用者檢查後自己按確認
@@ -14,7 +14,7 @@
 (function () {
     'use strict';
     var PANEL_ID = 'qkl-panel';
-    var VERSION = 'v1.1';
+    var VERSION = 'v1.2';
 
     var old = document.getElementById(PANEL_ID);
     if (old) { if (old._qklClose) old._qklClose(); else old.remove(); return; }   // 再點一次書籤＝關閉
@@ -228,6 +228,7 @@
 
     function close() {
         unwatch.forEach(function (f) { f(); });
+        document.removeEventListener('paste', onDialogPaste, true);
         document.removeEventListener('mousemove', dragMove);
         document.removeEventListener('mouseup', dragUp);
         ids = [];
@@ -282,12 +283,22 @@
         e.preventDefault();
         submitText(text);
     });
+    // 拆「身分證＋類別」文字：回傳 { id, vacs:[類別資訊] }（同一類只留最後一個）
+    function parseIdVacs(text) {
+        var got = (String(text).toUpperCase().match(/[A-Z][A-Z0-9]\d{8}/g) || []);
+        var rest = String(text).replace(/[A-Za-z][A-Za-z0-9]\d{8}/g, ' ');
+        var byFam = {};
+        (rest.match(/[A-Za-z0-9-]+/g) || []).forEach(function (w) {
+            var v = VAC_BY_KEY[w.toUpperCase()];
+            if (v) byFam[v.fam] = v;
+        });
+        return { id: got[0] || '', vacs: VACS.filter(function (v) { return byFam[v.fam] === v; }) };
+    }
     function submitText(text) {
         scan.value = '';
         var got = (String(text).toUpperCase().match(/[A-Z][A-Z0-9]\d{8}/g) || []);
         if (!got.length) { setMsg('err', '身分證格式不對（英文字母＋9 碼）'); return; }
-        var rest = String(text).replace(/[A-Za-z][A-Za-z0-9]\d{8}/g, ' ');
-        var once = (rest.match(/[A-Za-z0-9-]+/g) || []).map(vacInfo).filter(function (v) { return VAC_BY_KEY[String(v.key).toUpperCase()]; });
+        var once = parseIdVacs(text).vacs;
         if (once.length) {
             var saved = picked;
             picked = {};
@@ -298,6 +309,34 @@
             handleId(got[0]);
         }
     }
+
+    // 在平台自己的「現場掛號」視窗身分證欄貼上「身分證＋類別」→ 身分證填欄位、類別自動勾好（送出仍由使用者按「掛號」）
+    function onDialogPaste(e) {
+        if (panel.contains(e.target)) return;
+        if (!vm || !vm.dialog || !e.target.closest || !e.target.closest('.v-dialog--active')) return;
+        var text = (e.clipboardData || window.clipboardData).getData('text');
+        var r = parseIdVacs(text);
+        if (!r.id) return;                       // 不是身分證 → 照平台原本方式貼上
+        var dlg = findWalkinDialog();
+        if (!dlg) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var keys = r.vacs.map(function (v) { return v.key; });
+        dlg['身分證字號'] = r.id;
+        if (keys.length) dlg.vaccines = keys;
+        var had = listIndex()[r.id];
+        ids = ids.filter(function (x) { return x !== r.id; });
+        ids.unshift(r.id);
+        renderList();
+        if (had) {
+            var hk = String(had['接種疫苗'] || '');
+            setMsg('ok', '⚠ ' + esc(r.id) + ' 本場次已掛：' + chipsHtml(hk.split(/[,，\s]+/).filter(Boolean)) + '，請確認是否要再掛');
+            if (vm.$toast) vm.$toast.error(r.id + ' 本場次已掛（' + hk + '），請確認是否要再掛');
+        } else {
+            setMsg('go', '已在現場掛號視窗填好 ' + esc(r.id) + (keys.length ? '：' + chipsHtml(keys) : '') + '，請檢查後按「掛號」');
+        }
+    }
+    document.addEventListener('paste', onDialogPaste, true);
 
     // 拖曳面板
     var dragOn = false, sx, sy, ox, oy;

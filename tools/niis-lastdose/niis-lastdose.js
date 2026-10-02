@@ -1,5 +1,5 @@
 /*
- * NIIS 最近接種（v1.0）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
+ * NIIS 最近接種（v1.3）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
  *
  * 用途：讀健保卡進到個案接種紀錄頁後點書籤，自動從畫面上的接種紀錄表找出
  *       新冠（CoV…）與流感（Flu…）最近一次接種日、距今天數，讓使用者決定要掛哪幾針；
@@ -14,7 +14,7 @@
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v1.2';
+    var VERSION = 'v1.3';
 
     var TOP = document, STATE_KEY = '__niisLastDose';
     if (TOP[STATE_KEY]) { TOP[STATE_KEY].close(); return; }   // 再點一次書籤＝關閉
@@ -147,6 +147,8 @@
         '#niis-ld-panel .qb{padding:10px 12px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}' +
         '#niis-ld-panel .who{font-size:13px;color:#475569;background:#f1f5f9;border-radius:8px;padding:6px 9px}' +
         '#niis-ld-panel .who b{color:#0f172a;font-size:15px;letter-spacing:1px}' +
+        '#niis-ld-panel .who .pid{cursor:pointer;border-bottom:1px dashed #64748b}#niis-ld-panel .who .pid:hover{background:#e0f2f1}' +
+        '#niis-ld-panel .copy small{display:block;font-size:11.5px;font-weight:400;opacity:.85}' +
         '#niis-ld-panel .card{border-radius:10px;padding:8px 11px;border:2px solid}' +
         '#niis-ld-panel .card.cov{border-color:#fca5a5;background:#fef2f2}' +
         '#niis-ld-panel .card.flu{border-color:#93c5fd;background:#eff6ff}' +
@@ -235,7 +237,7 @@
         var fluTag = flu.last && flu.last.date >= fluSeasonStart()
             ? '<span class="tag warn">本季（' + (fluSeasonStart().getFullYear() - 1911) + '/10/01 起）已接種</span>'
             : '<span class="tag ok">本季尚未接種</span>';
-        var h = '<div class="who">證號：<b>' + (pid ? esc(pid) : '<span style="color:#b91c1c">讀不到</span>') + '</b>' + esc(age) + '</div>' +
+        var h = '<div class="who">證號：' + (pid ? '<b class="pid" data-act="copyId" title="點一下複製身分證">' + esc(pid) + ' 📋</b>' : '<b style="color:#b91c1c">讀不到</b>') + esc(age) + '</div>' +
             cardHtml('cov', '🦠 新冠最近一次', cov) +
             cardHtml('flu', '🤧 流感最近一次', flu, fluTag) +
             '<div class="sub">讀到 ' + data.recs.length + ' 筆已接種紀錄' + (codes.length ? '（代號開頭：' + esc(codes.slice(0, 12).join('、')) + '）' : '') + '</div>' +
@@ -245,14 +247,18 @@
                 esc(v.key) + '<small>' + esc(v.name) + '</small></button>';
         });
         var keys = pickedKeys();
-        h += '</div><button class="copy" data-act="copy"' + (pid && keys.length ? '' : ' disabled') + '>📋 複製「' +
-            esc(pid || '身分證') + ' ' + esc(keys.join(',') || '…') + '」</button>' +
-            '<div class="sub">複製後切到掛號平台，在「⚡ 快速掛號」輸入框按 Ctrl+V，就會開好現場掛號視窗（確認仍由你按）。</div>';
+        h += '</div><button class="copy" data-act="copy"' + (pid ? '' : ' disabled') + '>📋 複製「' +
+            esc(pid || '身分證') + (keys.length ? ' ' + esc(keys.join(',')) : '') + '」' + (keys.length ? '' : '<small>（未選類別＝只複製身分證）</small>') + '</button>' +
+            '<div class="sub">複製後切到掛號平台，打開「現場掛號」在身分證欄按 Ctrl+V，身分證與疫苗會自動填好（掛號仍由你按）。</div>';
         body.innerHTML = h;
     }
 
     function copyText(s, btn) {
-        function done() { btn.textContent = '✅ 已複製，請到掛號平台按 Ctrl+V'; }
+        function done() {
+            var oldHtml = btn.innerHTML;
+            btn.textContent = '✅ 已複製，請到掛號平台按 Ctrl+V';
+            setTimeout(function () { if (btn.isConnected) btn.innerHTML = oldHtml; }, 2000);
+        }
         var nav = host.defaultView ? host.defaultView.navigator : navigator;
         if (nav.clipboard && nav.clipboard.writeText) {
             nav.clipboard.writeText(s).then(done, fallback);
@@ -282,7 +288,8 @@
         var act = t.getAttribute('data-act');
         if (act === 'close') return close();
         if (act === 'refresh') { picked = {}; render(); return; }
-        if (act === 'copy') { copyText(pid + ' ' + pickedKeys().join(','), t); return; }
+        if (act === 'copy') { copyText((pid + ' ' + pickedKeys().join(',')).trim(), t); return; }
+        if (act === 'copyId') { copyText(pid, t); return; }
         var vac = t.getAttribute('data-vac');
         if (vac) {
             VACS.forEach(function (v) { if (v.key === vac) picked[v.fam] = picked[v.fam] === v.key ? undefined : v.key; });
