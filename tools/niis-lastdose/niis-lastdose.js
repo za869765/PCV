@@ -1,5 +1,5 @@
 /*
- * NIIS 最近接種（v1.4）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
+ * NIIS 最近接種（v1.5）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
  *
  * 用途：讀健保卡進到個案接種紀錄頁後點書籤，自動從畫面上的接種紀錄表找出
  *       新冠（CoV…）與流感（Flu…）最近一次接種日、距今天數，讓使用者決定要掛哪幾針；
@@ -14,7 +14,7 @@
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v1.4';
+    var VERSION = 'v1.5';
 
     var TOP = document, STATE_KEY = '__niisLastDose';
     if (TOP[STATE_KEY]) { TOP[STATE_KEY].close(); return; }   // 再點一次書籤＝關閉
@@ -157,6 +157,8 @@
         '#niis-ld-panel .card .d{font-size:20px;font-weight:800;color:#0f172a}' +
         '#niis-ld-panel .card .ago{font-size:13px;font-weight:700;color:#334155}' +
         '#niis-ld-panel .sub{color:#64748b;font-size:12px}' +
+        '#niis-ld-panel .gap{margin-top:4px;font-size:14px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:6px;padding:3px 8px}' +
+        '#niis-ld-panel .gapsub{font-size:11.5px;font-weight:400;margin-left:8px;color:#a16207}' +
         '#niis-ld-panel .tag{display:inline-block;border-radius:999px;padding:0 8px;font-size:12px;font-weight:700;margin-left:6px}' +
         '#niis-ld-panel .tag.warn{background:#fde68a;color:#92400e}#niis-ld-panel .tag.ok{background:#bbf7d0;color:#166534}' +
         '#niis-ld-panel .lbl{font-size:12.5px;color:#64748b;font-weight:700}' +
@@ -199,12 +201,27 @@
     function esc(s) {
         return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
-    function cardHtml(fam, title, info, extraTag) {
+    function cardHtml(fam, title, info, extraTag, extraLine) {
         if (!info.last) return '<div class="card ' + fam + '"><div class="t">' + title + '</div><div class="d">查無接種紀錄</div></div>';
         var n = daysAgo(info.last.date);
         return '<div class="card ' + fam + '"><div class="t">' + title + '（共 ' + info.count + ' 劑）' + (extraTag || '') + '</div>' +
             '<div class="d">' + fmtRoc(info.last.date) + '　<span class="ago">' + agoText(n) + '</span></div>' +
-            '<div class="sub">' + esc(info.last.code) + (info.last.unit ? '｜' + esc(info.last.unit) : '') + '</div></div>';
+            '<div class="sub">' + esc(info.last.code) + (info.last.unit ? '｜' + esc(info.last.unit) : '') + '</div>' + (extraLine || '') + '</div>';
+    }
+    // 新冠與上一劑需間隔 84 天：回傳 { tag, line }
+    var COV_GAP = 84;
+    function covGapInfo(info) {
+        if (!info.last) return { tag: '', line: '' };
+        var n = daysAgo(info.last.date);
+        var ok = new Date(info.last.date.getTime()); ok.setDate(ok.getDate() + COV_GAP);
+        if (n >= COV_GAP) return { tag: '<span class="tag ok">已滿 ' + COV_GAP + ' 天，可接種</span>', line: '' };
+        // 最快可打＝滿 84 天後遇到的第一個星期四（當天就是週四則當天）
+        var thu = new Date(ok.getTime());
+        while (thu.getDay() !== 4) thu.setDate(thu.getDate() + 1);
+        return {
+            tag: '<span class="tag warn">間隔未滿 ' + COV_GAP + ' 天（還差 ' + (COV_GAP - n) + ' 天）</span>',
+            line: '<div class="gap">⛔ 最快可打：<b>' + fmtRoc(thu) + '（四）</b><span class="gapsub">滿 ' + COV_GAP + ' 天為 ' + fmtRoc(ok) + '</span></div>'
+        };
     }
     function pickedKeys() {
         return VACS.filter(function (v) { return picked[v.fam] === v.key; }).map(function (v) { return v.key; });
@@ -236,13 +253,14 @@
         var showVacs = VACS.filter(function (v) { return !(v.child && ageN != null && ageN >= 7); });
         VACS.forEach(function (v) { if (showVacs.indexOf(v) < 0 && picked[v.fam] === v.key) picked[v.fam] = undefined; });
         var cov = latest(data.recs, isCov), flu = latest(data.recs, isFlu);
+        var covGap = covGapInfo(cov);
         var codes = [];
         data.recs.forEach(function (r) { var c = r.code.split(/[-_\s]/)[0]; if (codes.indexOf(c) < 0) codes.push(c); });
         var fluTag = flu.last && flu.last.date >= fluSeasonStart()
             ? '<span class="tag warn">本季（' + (fluSeasonStart().getFullYear() - 1911) + '/10/01 起）已接種</span>'
             : '<span class="tag ok">本季尚未接種</span>';
         var h = '<div class="who">證號：' + (pid ? '<b class="pid" data-act="copyId" title="點一下複製身分證">' + esc(pid) + ' 📋</b>' : '<b style="color:#b91c1c">讀不到</b>') + esc(age) + '</div>' +
-            cardHtml('cov', '🦠 新冠最近一次', cov) +
+            cardHtml('cov', '🦠 新冠最近一次', cov, covGap.tag, covGap.line) +
             cardHtml('flu', '🤧 流感最近一次', flu, fluTag) +
             '<div class="sub">讀到 ' + data.recs.length + ' 筆已接種紀錄' + (codes.length ? '（代號開頭：' + esc(codes.slice(0, 12).join('、')) + '）' : '') + '</div>' +
             '<div class="lbl">要掛哪幾針？（每類選一種，可只選一類）</div><div class="vacs">';
