@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.5)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.6)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -133,6 +133,14 @@
  *  - 個別拉選（身分別／針劑）自動暫存在瀏覽器：同一組檔案重新整理或重開頁面
  *    自動帶回（7 天過期）；頂列顯示暫存時間＋「清除暫存」鈕
  *  - 流感名單「待處理 N 人」即時計數；處理完的列綠閃後消除（可切「只顯示待處理」）
+ * v6.6 變更（使用者定案 A 案：分批下載＋雲端暫存＋多條件篩選）：
+ *  - 產檔改「只匯出處理好的人」：picks.partial 時有問題者（未指定針劑／缺出生／
+ *    流感不符門檻未拉選）不擋整檔，回報 pending；picks.excludeIds＝已匯出過的人一律略過
+ *    （防分批重複匯入 NIIS）；回傳 exportedIds 供前端標記；檔名加時分避免撞名
+ *  - 暫存改存試算表「匯出暫存」（saveExportDraftCloud／loadExportDraftCloud，依接種日期一列、
+ *    JSON 切段、ScriptLock、30 天自動清）：換電腦、重新整理、瀏覽器清資料都讀得回來
+ *  - 前端：各容器多條件篩選（多關鍵字／年齡區間＋未滿7歲・7歲以上等快選／狀態／來源／身分別），
+ *    全選＝只勾篩選結果、Shift 連續勾選；已匯出標記可取消；寄信附檔仍為完整嚴格產檔
  */
 
 function doGet() {
@@ -1055,6 +1063,11 @@ function buildNiisExport(phisFiles, jnContent, picks) {
     var slotPicks = picks.slots || {};
     var fluCodes = picks.fluCodes || {};       // 流感每人個別拉選的身分別（id -> F代碼）
     var personBatch = picks.personBatch || {}; // 每人個別拉選的針劑（slot -> { id: 'type|lot' }）
+    var partial = !!picks.partial;             // v6.6：只匯出處理好的人，未處理好的回報為待處理（不擋整檔）
+    var excludeIds = picks.excludeIds || {};   // v6.6：已匯出過的人（slot -> { id: 時間 }）不重複匯出
+    var pendingList = [];                      // v6.6：partial 模式略過的待處理者 [{slot, name, reason}]
+    var exportedIds = { k: [], z: [], v: [] }; // v6.6：本次實際匯出的人（前端標記「已匯出」）
+    var skippedExported = 0;
     var org = String(picks.org || '').trim();
     var date = String(picks.date || '').trim();
     if (!org) return { errorMessage: '接種機構代碼未設定！' };
@@ -1114,6 +1127,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
       var noBatch = [];      // 個別與主選針劑皆無（擋下列名）
       for (var i = 0; i < ids.length; i++) {
         var pid = ids[i];
+        if ((excludeIds[def.slot] || {})[pid]) { skippedExported++; continue; }   // v6.6：已匯出過
         var np = famNiis[pid] || {};
         var pBirthRaw = parsed.idBirthMap[pid] || np.birth || '';
         // 針劑：個別拉選優先，否則用該檔主選；匯出前字元防呆＋官方大小寫正典化
@@ -1125,12 +1139,19 @@ function buildNiisExport(phisFiles, jnContent, picks) {
         }
         pType = canonType(pType);
         pLot = cleanCodeStr(pLot);
-        if (!pType || !pLot) noBatch.push(nameOf(pid));
+        var probs = [];        // v6.6：此人的問題（partial 模式＝列為待處理略過；否則照舊擋下整檔）
+        if (!pType || !pLot) {
+          probs.push('未指定針劑');
+          if (!partial) noBatch.push(nameOf(pid));
+        }
         var identity = '';
         if (def.family === 'corona') {
           // 新冠：一律依年齡自動判斷（只看出生年；7 歲以下算實際足歲，對照表可設定）
           identity = covidIdentityByAge(pBirthRaw, date, covidTable);
-          if (!identity) noBirth.push(nameOf(pid));
+          if (!identity) {
+            probs.push('缺出生日期');
+            if (!partial) noBirth.push(nameOf(pid));
+          }
         } else if (def.family === 'flu') {
           // 流感：個別拉選優先 > NIIS 名單檔內身分別 > 符合公費門檻帶預設（所內/外設）
           if (fluCodes[pid]) {
@@ -1140,8 +1161,15 @@ function buildNiisExport(phisFiles, jnContent, picks) {
           } else {
             var fAge = ageOf(pBirthRaw, date);
             if (fAge != null && fAge >= minAge) identity = fluDefault;
-            else fluBad.push(nameOf(pid) + (fAge != null ? '（' + fAge + ' 歲）' : '（缺出生）'));
+            else {
+              probs.push(fAge != null ? '不符公費門檻（' + fAge + ' 歲）' : '缺出生日期');
+              if (!partial) fluBad.push(nameOf(pid) + (fAge != null ? '（' + fAge + ' 歲）' : '（缺出生）'));
+            }
           }
+        }
+        if (probs.length) {
+          if (partial) pendingList.push({ slot: def.expect, name: nameOf(pid), reason: probs.join('、') });
+          continue;
         }
         // 肺鏈不填身分別
         var sex = parsed.idSexMap[pid] || np.sex || '';
@@ -1155,6 +1183,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
           identity, '', '', '', '', '', '', ''
         ]);
         exported.push({ name: nameOf(pid), slot: def.expect });
+        exportedIds[def.slot].push(pid);
       }
       if (noBirth.length > 0) {
         return { errorMessage: '新冠名單缺出生日期，無法依年齡判斷身分別，請修正 HIS 檔：' + noBirth.join('、') };
@@ -1178,20 +1207,163 @@ function buildNiisExport(phisFiles, jnContent, picks) {
     }
 
     if (count === 0) {
+      if (pendingList.length) {
+        return { errorMessage: '目前沒有處理好的人可匯出（待處理 ' + pendingList.length + ' 人）', pending: pendingList };
+      }
+      if (skippedExported) {
+        return { errorMessage: '名單上的人都已匯出過了（' + skippedExported + ' 人）。如需重新匯出，請勾選後按「取消已匯出標記」' };
+      }
       return { errorMessage: '沒有可匯出的資料（HIS 檔與 NIIS 名單皆無名單）！' };
     }
 
     var csv = lines.join('\r\n') + '\r\n';
-    var fileName = 'NIIS匯入_' + date + '.csv';
+    // v6.6：檔名加時分，同一天分批下載不會撞名
+    var fileName = 'NIIS匯入_' + date + '_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'HHmm') + '.csv';
     var blob = Utilities.newBlob('', 'text/csv', fileName).setDataFromString(csv, 'Big5');
     return {
       fileName: fileName,
       base64: Utilities.base64Encode(blob.getBytes()),
       count: count,
-      exported: exported
+      exported: exported,
+      exportedIds: exportedIds,
+      pending: pendingList,
+      skippedExported: skippedExported
     };
   } catch (error) {
     return { errorMessage: '產檔失敗：' + error.toString() };
+  }
+}
+
+// ===== v6.6：匯出暫存（試算表「匯出暫存」，依接種日期一列） =====
+// 存個別拉選（身分別／針劑）＋「已匯出」紀錄：換電腦、重新整理都讀得回來，也用來防止分批下載重複匯出。
+// 內容含身分證，與「針劑記憶」同一份試算表，勿外流；超過 DRAFT_KEEP_DAYS 天未更新的列自動刪除。
+var DRAFT_SHEET_NAME = '匯出暫存';
+var DRAFT_KEEP_DAYS = 30;
+var DRAFT_CHUNK = 45000;      // 單格上限 5 萬字，JSON 切段存放
+var DRAFT_MAX_CHUNKS = 20;
+
+function getDraftSheet_() {
+  try {
+    var ss = null;
+    try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
+    if (!ss) { try { ss = SpreadsheetApp.openById(BATCH_SHEET_ID); } catch (e2) {} }
+    if (!ss) return null;
+    var sh = ss.getSheetByName(DRAFT_SHEET_NAME);
+    if (!sh) {
+      sh = ss.insertSheet(DRAFT_SHEET_NAME);
+      sh.getRange('A:A').setNumberFormat('@');   // 民國日期純文字，避免轉數字
+      sh.getRange(1, 1, 1, 4).setValues([['接種日期', '最後更新', '摘要', '內容（系統用，請勿修改）']])
+        .setFontWeight('bold').setBackground('#e8eaf6');
+      sh.setFrozenRows(1);
+      sh.setColumnWidth(1, 110);
+      sh.setColumnWidth(2, 160);
+      sh.setColumnWidth(3, 280);
+    }
+    return sh;
+  } catch (e3) {
+    return null;
+  }
+}
+
+function cleanDraftMap_(m, maxKey, maxVal) {
+  var out = {}, n = 0;
+  m = m || {};
+  for (var k in m) {
+    if (n >= 5000) break;
+    var key = String(k).slice(0, maxKey);
+    var val = String(m[k] == null ? '' : m[k]).slice(0, maxVal);
+    if (!key || !val) continue;
+    out[key] = val;
+    n++;
+  }
+  return out;
+}
+
+function cleanDraft_(d) {
+  d = d || {};
+  var pb = d.personBatch || {}, ex = d.exported || {};
+  return {
+    t: Number(d.t) || Date.now(),
+    fluCodes: cleanDraftMap_(d.fluCodes, 20, 10),
+    personBatch: { k: cleanDraftMap_(pb.k, 20, 90), z: cleanDraftMap_(pb.z, 20, 90), v: cleanDraftMap_(pb.v, 20, 90) },
+    exported: { k: cleanDraftMap_(ex.k, 20, 20), z: cleanDraftMap_(ex.z, 20, 20), v: cleanDraftMap_(ex.v, 20, 20) }
+  };
+}
+
+function findDraftRow_(sh, dateRoc) {
+  var last = sh.getLastRow();
+  if (last < 2) return -1;
+  var vals = sh.getRange(2, 1, last - 1, 1).getDisplayValues();
+  for (var i = 0; i < vals.length; i++) {
+    if (String(vals[i][0]).trim() === dateRoc) return i + 2;
+  }
+  return -1;
+}
+
+function purgeOldDrafts_(sh) {
+  var last = sh.getLastRow();
+  if (last < 2) return;
+  var vals = sh.getRange(2, 2, last - 1, 1).getValues();
+  var limit = Date.now() - DRAFT_KEEP_DAYS * 86400000;
+  for (var i = vals.length - 1; i >= 0; i--) {
+    var d = vals[i][0];
+    if (d instanceof Date && d.getTime() < limit) sh.deleteRow(i + 2);
+  }
+}
+
+function saveExportDraftCloud(dateRoc, draft) {
+  dateRoc = String(dateRoc || '').trim();
+  if (!/^\d{7}$/.test(dateRoc)) return { success: false, error: '接種日期格式錯誤' };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { success: false, error: '系統忙碌，稍後自動重試' };
+  try {
+    var sh = getDraftSheet_();
+    if (!sh) return { success: false, error: '無法開啟試算表' };
+    var clean = cleanDraft_(draft);
+    var json = JSON.stringify(clean);
+    var chunks = [];
+    // 每段前綴「~」：避免段首剛好是 = + - 數字被試算表當公式或數值
+    for (var p = 0; p < json.length; p += DRAFT_CHUNK) chunks.push('~' + json.slice(p, p + DRAFT_CHUNK));
+    if (chunks.length > DRAFT_MAX_CHUNKS) return { success: false, error: '暫存資料過大' };
+    var cnt = function(o) { return Object.keys(o || {}).length; };
+    var summary = '個別身分別 ' + cnt(clean.fluCodes) +
+      '・個別針劑 ' + (cnt(clean.personBatch.k) + cnt(clean.personBatch.z) + cnt(clean.personBatch.v)) +
+      '・已匯出 ' + (cnt(clean.exported.k) + cnt(clean.exported.z) + cnt(clean.exported.v)) + ' 人';
+    var row = findDraftRow_(sh, dateRoc);
+    if (row < 0) row = sh.getLastRow() + 1;
+    var lastCol = sh.getLastColumn();
+    if (lastCol > 3) sh.getRange(row, 4, 1, lastCol - 3).clearContent();   // 清掉舊的多餘分段
+    sh.getRange(row, 1, 1, 3 + chunks.length).setValues([[dateRoc, new Date(), summary].concat(chunks)]);
+    purgeOldDrafts_(sh);
+    return { success: true, savedAt: clean.t };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function loadExportDraftCloud(dateRoc) {
+  try {
+    dateRoc = String(dateRoc || '').trim();
+    if (!/^\d{7}$/.test(dateRoc)) return { success: false, error: '接種日期格式錯誤' };
+    var sh = getDraftSheet_();
+    if (!sh) return { success: false, error: '無法開啟試算表' };
+    var row = findDraftRow_(sh, dateRoc);
+    if (row < 0) return { success: true, draft: null };
+    var lastCol = sh.getLastColumn();
+    if (lastCol < 4) return { success: true, draft: null };
+    var cells = sh.getRange(row, 4, 1, lastCol - 3).getValues()[0];
+    var json = '';
+    for (var c = 0; c < cells.length; c++) {
+      var s = String(cells[c] == null ? '' : cells[c]);
+      if (!s) break;
+      json += s.charAt(0) === '~' ? s.slice(1) : s;
+    }
+    if (!json) return { success: true, draft: null };
+    return { success: true, draft: cleanDraft_(JSON.parse(json)) };
+  } catch (e) {
+    return { success: false, error: e.toString() };
   }
 }
 
