@@ -1441,6 +1441,17 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 .batch-chip.expired i { color: #dc2626; }
 .batch-chip.expired::before { content: '⚠ '; }
 
+/* v6.6.4：匯出面板「💾 暫存」按鈕 */
+.modal-btn-save {
+    background: linear-gradient(135deg, #0d9488, #0f766e);
+    color: white;
+}
+
+.modal-btn-save:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.4);
+}
+
 /* v6.6.3：小卡上的推估廠牌 */
 .brand-tag {
     font-size: 11px;
@@ -2274,6 +2285,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             </div>
             <div class="custom-modal-footer">
                 <button class="modal-btn modal-btn-secondary" data-tip="關閉面板&#10;個別拉選與匯出紀錄已自動存雲端，下次開啟會帶回" onclick="closeExport()">取消</button>
+                <button class="modal-btn modal-btn-save" data-tip="立即把個別拉選與匯出紀錄存到雲端&#10;（平常每次變動也會自動暫存）&#10;關閉面板、重新整理、換電腦都讀得回來" onclick="saveDraftNow()">💾 暫存</button>
                 <button class="modal-btn modal-btn-primary" data-tip="產生媒體資料上傳檔（Big5 CSV）並下載&#10;只匯出「已處理好」的人；待處理的留在清單上&#10;已下載的標記「已匯出」，不會重複匯出" onclick="generateNiisFile()">產生並下載</button>
             </div>
         </div>
@@ -2337,7 +2349,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.6.3</div>
+    <div class="version-tag">v6.6.4</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2800,18 +2812,13 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 .saveExportDraftCloud(date, payload);
         }
 
-        // 讀取指定接種日期的暫存：mode='merge' 記憶體已有的拉選優先（換日期／首次開面板）；
-        //                          mode='replace' 以暫存為準（「從雲端讀回」）
+        // 讀取指定接種日期的暫存：記憶體已有的拉選優先（換日期／首次開面板）；
         // 已匯出紀錄屬於該接種日期，一律換成讀到的那份
         function loadDraftForDate(date, mode, cb) {
             var apply = function(cloud, failed) {
                 var local = loadLocalDraft(date);
                 var d = cloud;
                 if (local && (!d || (local.t || 0) > (d.t || 0))) d = local;   // 取較新（雲端失敗時本機補位）
-                if (mode === 'replace') {
-                    fluPersonCodes = {};
-                    slotPersonBatch = { k: {}, z: {}, v: {} };
-                }
                 exportedIds = { k: {}, z: {}, v: {} };
                 var n = 0;
                 if (d) {
@@ -2887,17 +2894,22 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             el.classList.toggle('warn', draftState === 'local' || draftState === 'loadfail');
         }
 
-        // 「從雲端讀回」：先把手上的存上去，再以雲端為準重讀——讓使用者隨時確認暫存真的讀得回來
-        function reloadDraftFromCloud() {
-            if (!draftDate) return;
-            if (exportModalOpen()) collectExportInputs();
-            showFx('loading', '從雲端讀回暫存中', '接種日期 民國 ' + draftDate);
-            flushDraftSave(function() {
-                loadDraftForDate(draftDate, 'replace', function(n, ex) {
-                    if (exportModalOpen()) renderExport();
-                    refreshMainListBadges();
-                    showFx('success', '已讀回暫存', '民國 ' + draftDate + '：個別拉選 ' + n + ' 筆、已匯出 ' + ex + ' 人', 2800);
-                });
+        // v6.6.4：「💾 暫存」按鈕（產生並下載旁）——手動立即存一次並回報結果（自動暫存仍照常進行）
+        function saveDraftNow() {
+            if (!exportModalOpen() || !document.getElementById('expDate')) return;
+            collectExportInputs();
+            if (!draftDate) draftDate = currentRocDate();
+            if (!/^\d{7}$/.test(draftDate)) { showModal('請先選擇接種日期！'); return; }
+            draftDirty = true;
+            saveLocalDraft(draftPayload());
+            showFx('loading', '暫存中', '民國 ' + draftDate);
+            flushDraftSave(function(ok) {
+                if (ok) {
+                    showFx('success', '已暫存', '民國 ' + draftDate + '：個別拉選 ' + draftPickCount() + ' 筆、已匯出 ' +
+                        draftExportedCount() + ' 人\n已存到雲端，關閉面板、重新整理、換電腦都讀得回來', 2800);
+                } else {
+                    showFx('error', '雲端暫存失敗', '已先存在這台電腦，30 秒後會自動重試', 3600);
+                }
             });
         }
 
@@ -3206,9 +3218,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             html += '<div class="s-field"><span class="s-cap">民國</span><div style="font-weight:600;padding:7px 2px;font-size:1.05rem;" id="expDateRoc">—</div></div>';
             html += '<div class="s-field s-field-grow" style="color:#94a3b8;font-size:12.5px;padding-bottom:8px;">針劑批號在主頁「匯入針劑」維護；判讀設定在主頁右上 ⚙</div>';
             if (slots.length) {
-                html += '<div class="s-field" style="padding-bottom:4px;" data-tip="個別拉選（身分別／針劑）與「已匯出」紀錄&#10;每次變動都自動存到試算表「匯出暫存」（依接種日期一列）&#10;關閉面板、重新整理、換電腦都讀得回來&#10;按「從雲端讀回」可隨時確認">';
+                html += '<div class="s-field" style="padding-bottom:4px;" data-tip="個別拉選（身分別／針劑）與「已匯出」紀錄&#10;每次變動都自動存到試算表「匯出暫存」（依接種日期一列）&#10;關閉面板、重新整理、換電腦都讀得回來&#10;也可按下方「💾 暫存」立即存一次">';
                 html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="draft-note" id="draftNote"></span>';
-                html += '<button type="button" class="s-btn s-copy" onclick="reloadDraftFromCloud()">☁️ 從雲端讀回</button>';
                 html += '<button type="button" class="s-btn s-del" data-tip="清除這個接種日期的個別拉選&#10;（已匯出紀錄保留）" onclick="clearExportDraft()">🧹 清除拉選</button></div></div>';
             }
             html += '</div>';
