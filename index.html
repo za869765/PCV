@@ -2727,7 +2727,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.8.2</div>
+    <div class="version-tag">v6.8.3</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3325,7 +3325,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         function openSetup() {
             setupState = { outpost: expOutpost, batch: {}, review: {}, step: 1,
-                           kidOn: true, kidMax: 6, kidBatch: -1 };   // 幼兒：預設 F01、未滿 7 歲、針劑同成人主選
+                           kidOn: true, kidMax: 6, kidBatch: defaultKidBatch() };   // 幼兒：預設 F01、未滿 7 歲、針劑依廠牌偏好預選
             setSetupStep(1);
             ['k', 'z', 'v'].forEach(function(s) {
                 var sel = document.getElementById('expBatch_' + s);
@@ -3581,6 +3581,23 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         /* ===== v6.8.2：幼兒（流感、未滿 N+1 歲）在快速設定一起批次設定 F01＋幼兒針劑 ===== */
         var KID_CODE = 'F01';
+
+        // v6.8.3：幼兒針劑預選廠牌偏好（使用者定案）——GSK 為主、東洋（Seqirus 一般型）為次；
+        //   同廠牌取效期最近；鎖定中的機構專用（FluAdj 東洋輔流禦 FLUAD，佐劑型）不會被預選；
+        //   都沒有 → -1（同成人主選針劑）
+        var KID_BRAND_PREF = [/^GSK/, /東洋|Seqirus/];
+
+        function defaultKidBatch() {
+            var list = batchIdxByExpiry('flu');   // 已依效期最近→最久
+            for (var p = 0; p < KID_BRAND_PREF.length; p++) {
+                for (var i = 0; i < list.length; i++) {
+                    var b = exportConfig.batches[list[i]];
+                    if (batchLocked(b) || batchRestricted(b)) continue;
+                    if (KID_BRAND_PREF[p].test(batchBrand(b).brand)) return list[i];
+                }
+            }
+            return -1;
+        }
 
         // 幼兒名單：流感、未匯出、年齡 ≤ 上限（預設 6＝未滿 7 歲）
         function kidCandidates() {
