@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.6.1)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.6.2)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -143,6 +143,8 @@
  *    全選＝只勾篩選結果、Shift 連續勾選；已匯出標記可取消；寄信附檔仍為完整嚴格產檔
  * v6.6.1（前端；後端僅改版號）：修開面板卡在轉圈（保留接種日期、載入錯誤/逾時顯示原因＋重試、
  *    雲端暫存逾時先用本機備份）；取消名單列無限動畫改靜態紅底（名單多時卡頓）
+ * v6.6.2：年齡規則定案——足歲 7 歲以下（含 7）算到日、超過 7 歲只看年（ageOf；年差 8 生日未到＝7）；
+ *    前端加排序（姓名/年齡/身分證/性別/狀態）與性別篩選
  */
 
 function doGet() {
@@ -1017,15 +1019,16 @@ function parseRocYmd(s) {
   return { y: y, m: m, d: d };
 }
 
-// v6.4 年齡：原則只看出生年；7 歲以下改依年月日算實際足歲（生日未到減 1）
+// 年齡（v6.6.2 使用者定案）：實際足歲 7 歲以下（含 7）算到「日」；超過 7 歲只看「年」（接種年−出生年）
+//   例：年差 8 但生日未到＝足歲 7 → 仍算到日回 7（v6.4 原以年差 >7 判斷會回 8）
 function ageOf(birthRoc, vacRoc) {
   var b = parseRocYmd(birthRoc), v = parseRocYmd(vacRoc);
   if (!b || !v) return ageByYear(birthRoc, vacRoc);   // 解析不了完整日期才退回只看年
   var yd = v.y - b.y;
   if (yd < 0) return null;
-  if (yd > 7) return yd;
   var exact = yd - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
-  return exact < 0 ? null : exact;
+  if (exact < 0) return null;
+  return exact <= 7 ? exact : yd;
 }
 
 // v6.4：需提醒確認的掛號代號（XFG-S＝機構內接種專用；容許全形連字號與「代號 - 中文」全文）
@@ -1148,7 +1151,7 @@ function buildNiisExport(phisFiles, jnContent, picks) {
         }
         var identity = '';
         if (def.family === 'corona') {
-          // 新冠：一律依年齡自動判斷（只看出生年；7 歲以下算實際足歲，對照表可設定）
+          // 新冠：一律依年齡自動判斷（足歲 7 歲以下算到日、超過 7 歲只看年，對照表可設定）
           identity = covidIdentityByAge(pBirthRaw, date, covidTable);
           if (!identity) {
             probs.push('缺出生日期');

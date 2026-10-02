@@ -2326,7 +2326,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.6.1</div>
+    <div class="version-tag">v6.6.2</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2521,7 +2521,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         var expOutpost = false;   // 本場為外設站（流感預設 F03A↔F03B；每次開面板重設為所內）
 
         // v6.6：各容器篩選條件＋已匯出紀錄（已匯出依接種日期存雲端，分批下載不重複匯出）
-        function newFilter() { return { kw: '', ageMin: '', ageMax: '', status: 'all', src: 'all', code: '' }; }
+        function newFilter() { return { kw: '', ageMin: '', ageMax: '', status: 'all', src: 'all', code: '', sex: 'all' }; }
+        var slotSort = { k: 'name', z: 'name', v: 'name' };   // v6.6.2：各容器排序方式（清除篩選不重設）
+        var slotOrder = { k: [], z: [], v: [] };             // 目前畫面順序（列索引），Shift 連選依此
         var slotFilter = { k: newFilter(), z: newFilter(), v: newFilter() };
         var exportedIds = { k: {}, z: {}, v: {} };        // slot -> id -> 匯出時間 'HH:MM'
         var lastChkIdx = { k: null, z: null, v: null };   // Shift 連續勾選的起點
@@ -2575,7 +2577,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return { y: y, m: m, d: d };
         }
 
-        // v6.4 年齡（同後端 ageOf）：原則只看出生年；7 歲以下依年月日算實際足歲
+        // 年齡（同後端 ageOf；v6.6.2 使用者定案）：實際足歲 7 歲以下（含 7）算到「日」；超過 7 歲只看「年」
         function ageOfJs(birth, vacRoc) {
             var b = parseRocYmdJs(birth), v = parseRocYmdJs(vacRoc);
             if (!b || !v) {   // 解析不了完整日期才退回只看年
@@ -2584,9 +2586,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             }
             var yd = v.y - b.y;
             if (yd < 0) return null;
-            if (yd > 7) return yd;
             var exact = yd - ((v.m < b.m || (v.m === b.m && v.d < b.d)) ? 1 : 0);
-            return exact < 0 ? null : exact;
+            if (exact < 0) return null;
+            return exact <= 7 ? exact : yd;
         }
 
         function fluAgeOf(p) {
@@ -3278,6 +3280,19 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 h += '<option value="' + o[0] + '"' + (f.src === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
             });
             h += '</select>';
+            // v6.6.2：性別篩選（搭配「全選篩選結果」＝批次選某性別）
+            h += '<select class="s-input" id="fsex_' + slot + '" onchange="onFilterInput(' + q + ')">';
+            [['all', '全部性別'], ['M', '男'], ['F', '女']].forEach(function(o) {
+                h += '<option value="' + o[0] + '"' + (f.sex === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+            });
+            h += '</select>';
+            // v6.6.2：排序（只改畫面順序，不影響拉選與匯出）
+            h += '<select class="s-input" id="fsort_' + slot + '" onchange="setSort(' + q + ', this.value)" data-tip="只改變名單顯示順序&#10;不影響拉選與匯出">';
+            [['name', '⇅ 姓名（姓氏筆劃）'], ['ageAsc', '⇅ 年齡 小→大'], ['ageDesc', '⇅ 年齡 大→小'],
+             ['id', '⇅ 身分證字號'], ['sex', '⇅ 性別（女→男）'], ['status', '⇅ 狀態（待處理優先）']].forEach(function(o) {
+                h += '<option value="' + o[0] + '"' + (slotSort[slot] === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+            });
+            h += '</select>';
             if (slot === 'z') {
                 h += '<select class="s-input" id="fcode_' + slot + '" style="max-width:190px;" onchange="onFilterInput(' + q + ')">';
                 h += '<option value="">全部身分別</option>';
@@ -3302,13 +3317,14 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             f.status = g('fst_') || 'all';
             f.src = g('fsrc_') || 'all';
             f.code = slot === 'z' ? g('fcode_') : '';
+            f.sex = g('fsex_') || 'all';
         }
 
         function writeFilter(slot) {
             var f = slotFilter[slot];
             var s = function(id, v) { var el = document.getElementById(id + slot); if (el) el.value = v; };
             s('fkw_', f.kw); s('fmin_', f.ageMin); s('fmax_', f.ageMax);
-            s('fst_', f.status); s('fsrc_', f.src); s('fcode_', f.code);
+            s('fst_', f.status); s('fsrc_', f.src); s('fcode_', f.code); s('fsex_', f.sex);
         }
 
         function updateAgeChips(slot) {
@@ -3354,6 +3370,66 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             writeFilter(slot);
             updateAgeChips(slot);
             refreshSlot(slot, false);
+        }
+
+        // v6.6.2：性別正規化（HIS 檔「男/女」、NIIS 檔「M/F」或 1/2）
+        function sexOf(p) {
+            var x = String((p && p.sex) || '').trim().toUpperCase();
+            if (x.indexOf('男') !== -1 || x === 'M' || x === '1') return 'M';
+            if (x.indexOf('女') !== -1 || x === 'F' || x === '2') return 'F';
+            return '';
+        }
+
+        function setSort(slot, mode) {
+            slotSort[slot] = mode || 'name';
+            applySort(slot);
+        }
+
+        // 依排序方式重排畫面上的列（搬移 DOM 節點；列 id 與索引不變，拉選值不受影響）
+        function applySort(slot) {
+            var list = slotPersonList[slot] || [];
+            var box = listBoxOf(slot);
+            if (!box || !list.length) { slotOrder[slot] = []; return; }
+            var mode = slotSort[slot] || 'name';
+            var idx = [];
+            for (var i = 0; i < list.length; i++) idx.push(i);
+            var ageCache = {};
+            var ageOfIdx = function(i) {
+                if (!(i in ageCache)) ageCache[i] = fluAgeOf(list[i]);
+                return ageCache[i];
+            };
+            var byName = function(a, b) { return list[a].name.localeCompare(list[b].name, 'zh-Hant'); };
+            var rank = function(i) {   // 待處理 0 → 可匯出 1 → 已匯出 2
+                if (exportedIds[slot][list[i].id]) return 2;
+                var row = document.getElementById(rowIdOf(slot, i));
+                return row && row.getAttribute('data-pend') === '1' ? 0 : 1;
+            };
+            idx.sort(function(a, b) {
+                var d = 0;
+                if (mode === 'ageAsc' || mode === 'ageDesc') {
+                    var x = ageOfIdx(a), y = ageOfIdx(b);
+                    if (x == null && y == null) d = 0;
+                    else if (x == null) return 1;      // 缺出生一律排最後
+                    else if (y == null) return -1;
+                    else d = mode === 'ageAsc' ? x - y : y - x;
+                } else if (mode === 'id') {
+                    d = list[a].id < list[b].id ? -1 : (list[a].id > list[b].id ? 1 : 0);
+                } else if (mode === 'sex') {
+                    var o = { F: 0, M: 1, '': 2 };
+                    d = o[sexOf(list[a])] - o[sexOf(list[b])];
+                } else if (mode === 'status') {
+                    d = rank(a) - rank(b);
+                }
+                return d || byName(a, b);
+            });
+            var frag = document.createDocumentFragment();
+            idx.forEach(function(i) {
+                var row = document.getElementById(rowIdOf(slot, i));
+                if (row) frag.appendChild(row);
+            });
+            box.appendChild(frag);
+            slotOrder[slot] = idx;
+            lastChkIdx[slot] = null;
         }
 
         // 解析 6Z 檔名單（前端，表頭偵測同後端）
@@ -3529,6 +3605,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             }
             lastChkIdx[slot] = null;
             refreshSlot(slot, false);
+            applySort(slot);   // v6.6.2：維持使用者選的排序
         }
 
         // 單列狀態：年齡、已匯出、個別拉選、待處理原因（與後端 partial 判定同規則）
@@ -3573,6 +3650,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 case 'mainbatch': if (info.ownBatch) return false; break;
             }
             if (f.src !== 'all' && (p.src === 'niis' ? 'niis' : 'his') !== f.src) return false;
+            if (f.sex && f.sex !== 'all' && sexOf(p) !== f.sex) return false;
             if (f.code) {
                 var eff = info.code || p.fcode || '';
                 if (f.code === '__default' ? !!eff : eff !== f.code) return false;
@@ -3593,7 +3671,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function rowTip(slot, info, minAge, defCode) {
             var p = info.p;
             var base = '身分證：' + p.id + (p.birth ? '\n出生：' + p.birth : '') +
-                (info.age != null ? '\n年齡：' + info.age + ' 歲（只看出生年；7 歲以下算足歲）' : '') +
+                (info.age != null ? '\n年齡：' + info.age + ' 歲（7 歲以下算到日；8 歲以上只看年）' : '') +
                 '\n來源：' + (p.src === 'niis' ? 'NIIS 名單' : 'HIS 掛號檔') +
                 (info.batText ? '\n針劑：' + info.batText + (info.ownBatch ? '（個別拉選）' : '（主選）') : '');
             var head;
@@ -3742,10 +3820,15 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         function chkClick(ev, slot, i) {
             var c = document.getElementById(chkIdOf(slot, i));
             if (ev && ev.shiftKey && lastChkIdx[slot] != null && c) {
-                var a = Math.min(lastChkIdx[slot], i), b = Math.max(lastChkIdx[slot], i);
+                // v6.6.2：依「畫面順序」連選（排序後索引≠畫面位置）
+                var ord = slotOrder[slot] && slotOrder[slot].length ? slotOrder[slot] : null;
+                var pa = ord ? ord.indexOf(lastChkIdx[slot]) : lastChkIdx[slot];
+                var pb = ord ? ord.indexOf(i) : i;
+                var a = Math.min(pa, pb), b = Math.max(pa, pb);
                 for (var j = a; j <= b; j++) {
-                    if (rowHidden(slot, j)) continue;
-                    var cj = document.getElementById(chkIdOf(slot, j));
+                    var ri = ord ? ord[j] : j;
+                    if (rowHidden(slot, ri)) continue;
+                    var cj = document.getElementById(chkIdOf(slot, ri));
                     if (cj) cj.checked = c.checked;
                 }
             }
@@ -4103,7 +4186,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var hEl = document.querySelector('#ruleModal .custom-modal-header h2');
             if (hEl) hEl.textContent = sc === 'covid' ? '🦠 新冠：身分別自動判讀設定' : '💉 流感：身分別自動判讀設定';
             var cfg = exportConfig;
-            var html = '<div class="settings-help">依接種對象<b>年齡（只看出生年；7 歲以下依年月日算實際足歲）</b>自動填身分別；' +
+            var html = '<div class="settings-help">依接種對象<b>年齡（足歲 7 歲以下算到日；超過 7 歲只看出生年）</b>自動填身分別；' +
                 '改完按「儲存設定」存雲端（全所共用），平常不需進來。</div>';
             if (sc === 'covid') {
             html += '<div class="settings-row"><div style="font-weight:600;margin-bottom:8px;">🦠 新冠：年齡對照表</div>';
