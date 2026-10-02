@@ -565,6 +565,17 @@ h1                { animation-delay: 0.05s; }
     transition: background-color 0.2s ease;
 }
 
+/* v6.7.3：名冊姓氏分組——同姓一組、各組交替淡底色、組間加大間距（畫面與列印皆同） */
+.sn-grp {
+    padding: 1px 4px;
+    margin-right: 0.9em;
+    border-radius: 4px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+}
+
+.sn-grp.alt { background: #e8eef6; }
+
 .pname:hover {
     background-color: rgba(52, 152, 219, 0.12);
 }
@@ -2139,6 +2150,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     .main-upload-hero,
     .phis-upload-row,
     .button-group,
+    #mainBatchArea,
     .divider,
     .modal,
     .custom-modal-overlay,
@@ -2224,19 +2236,22 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         margin-bottom: 10px !important;
     }
 
-    /* 資料量自適應行距（printPage 依人數掛 class） */
-    body.print-loose #result .section > div {
-        line-height: 2.1 !important;
-        font-size: 13px !important;
-    }
-
-    body.print-dense #result .section > div {
-        line-height: 1.35 !important;
-        font-size: 11px !important;
+    /* v6.7.3：名單字體依人數連續調整（printPage 算好設成變數；10.5～16px 上下限） */
+    #result .section > div {
+        font-size: var(--pn-size, 12px) !important;
+        line-height: var(--pn-lh, 1.7) !important;
     }
 
     body.print-dense #result .section {
         margin-bottom: 6px !important;
+    }
+
+    /* 姓氏分組：列印也要印出交替底色與組間距（print 預設不印背景，需 exact） */
+    #result .sn-grp {
+        padding: 1px 4px !important;
+        margin-right: 0.9em !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 
     /* 長名單段落：允許跨頁並於標題標示 */
@@ -2514,7 +2529,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.7.2</div>
+    <div class="version-tag">v6.7.3</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -5018,8 +5033,45 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         /* ===== 顯示結果 ===== */
         function displayResult(htmlContent) {
             document.getElementById('result').innerHTML = htmlContent;
+            groupNamesBySurname();
             addNeedleAdjustmentFeatures();
             refreshMainListBadges();
+        }
+
+        // v6.7.3：名冊依姓氏分組（後端已依姓名排序，同姓相鄰）——同姓包成一組、各組交替淡底色、組間加大間距，
+        //         列印對名字時好分段。搬移原本的名字節點（浮標/醒目提示屬性保留）；
+        //         組與組之間放全形空白，寄信 PDF 沒有樣式時名字也不會黏在一起
+        function groupNamesBySurname() {
+            var secs = document.querySelectorAll('#result .section');
+            for (var s = 0; s < secs.length; s++) {
+                var box = null;
+                for (var c = 0; c < secs[s].children.length; c++) {
+                    if (secs[s].children[c].tagName === 'DIV') { box = secs[s].children[c]; break; }
+                }
+                if (!box) continue;
+                var spans = [];
+                for (var k = 0; k < box.children.length; k++) {
+                    if (box.children[k].classList.contains('pname')) spans.push(box.children[k]);
+                }
+                if (!spans.length) continue;
+                var frag = document.createDocumentFragment();
+                var cur = null, curKey = null, n = 0;
+                spans.forEach(function(sp) {
+                    var key = sp.textContent.trim().charAt(0);   // 姓氏＝名字第一個字
+                    if (key !== curKey) {
+                        if (cur) frag.appendChild(document.createTextNode('　'));
+                        cur = document.createElement('span');
+                        cur.className = 'sn-grp' + (n++ % 2 ? ' alt' : '');
+                        frag.appendChild(cur);
+                        curKey = key;
+                    } else {
+                        cur.appendChild(document.createTextNode('、'));
+                    }
+                    cur.appendChild(sp);
+                });
+                box.innerHTML = '';
+                box.appendChild(frag);
+            }
         }
 
         /* ===== 異常人員彈窗（重複掛號 / 疫苗衝突） ===== */
@@ -5120,7 +5172,11 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var names = document.querySelectorAll('#result .pname').length;
             document.body.classList.remove('print-dense', 'print-loose');
             if (names > 100) document.body.classList.add('print-dense');
-            else if (names < 30) document.body.classList.add('print-loose');
+            // v6.7.3：字體依人數連續調整——20 人以下 16px、200 人以上 10.5px，中間線性；行距隨字體 1.45～1.95
+            var size = Math.max(10.5, Math.min(16, 16 - (names - 20) * (5.5 / 180)));
+            var lh = 1.45 + (size - 10.5) / 5.5 * 0.5;
+            document.body.style.setProperty('--pn-size', size.toFixed(1) + 'px');
+            document.body.style.setProperty('--pn-lh', lh.toFixed(2));
 
             var secs = document.querySelectorAll('#result .section');
             for (var i = 0; i < secs.length; i++) {
