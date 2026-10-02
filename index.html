@@ -569,10 +569,11 @@ h1                { animation-delay: 0.05s; }
     background-color: rgba(52, 152, 219, 0.12);
 }
 
-/* 主頁名單：HIS 流感者不符公費門檻未拉選 → 紅色脈動＋⚠ 醒目提示 */
+/* 主頁名單：HIS 流感者不符公費門檻未拉選 → 紅底＋⚠ 醒目提示
+   （v6.6.1：取消無限脈動——名單一多，每個名字都在重繪會讓整頁卡頓） */
 .pname.flu-alert {
     padding: 1px 4px;
-    animation: nameAlert 1.4s ease-in-out infinite;
+    background-color: rgba(231, 76, 60, 0.18);
 }
 
 .pname.flu-alert::after {
@@ -582,13 +583,8 @@ h1                { animation-delay: 0.05s; }
     margin-left: 2px;
 }
 
-@keyframes nameAlert {
-    0%, 100% { background-color: rgba(231, 76, 60, 0.10); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
-    50%      { background-color: rgba(231, 76, 60, 0.30); box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.20); }
-}
-
 @media print {
-    .pname.flu-alert { animation: none; background: #ffebee !important; }
+    .pname.flu-alert { background: #ffebee !important; }
 }
 
 /* ===== 全螢幕動畫回饋彈窗 ===== */
@@ -1562,18 +1558,13 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     transition: background-color 0.25s ease;
 }
 
+/* v6.6.1：紅底改靜態——原本每列無限脈動＋👉晃動，十月門檻 65 歲時幾十列同時動畫會卡頓 */
 .flu-row.bad {
     background: #ffebee;
     border: 1px solid #ef9a9a;
-    animation: badPulse 1.6s ease-in-out infinite;
 }
 
-@keyframes badPulse {
-    0%, 100% { background-color: #ffebee; box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
-    50%      { background-color: #ffcdd2; box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.18); }
-}
-
-/* 👉 手勢：只在紅底列顯示，指向拉選選單引導點選 */
+/* 👉 手勢：只在紅底列顯示，指向拉選選單引導點選（靜態） */
 .flu-hand {
     display: none;
 }
@@ -1582,12 +1573,6 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     display: inline-block;
     font-size: 18px;
     flex-shrink: 0;
-    animation: handNudge 0.9s ease-in-out infinite;
-}
-
-@keyframes handNudge {
-    0%, 100% { transform: translateX(0); }
-    50%      { transform: translateX(7px); }
 }
 
 .flu-row.bad .flu-name {
@@ -1728,10 +1713,14 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     line-height: 1.3;
 }
 
+/* 副行固定一行（太長以…截斷，完整資料看浮標），列高一致不爆行 */
 .p-sub {
     font-size: 11.5px;
     color: #94a3b8;
     font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .ex-tag, .sp-tag {
@@ -2337,7 +2326,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.6</div>
+    <div class="version-tag">v6.6.1</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -2836,12 +2825,33 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 updateDraftNote();
                 if (cb) cb(n, draftExportedCount());
             };
+            // v6.6.1：雲端 12 秒沒回應先用本機備份繼續（不讓面板卡住）；雲端晚到且有資料 → 再補套一次並重繪
+            var settled = false;
+            var timer = setTimeout(function() {
+                if (settled) return;
+                settled = true;
+                apply(null, true);
+            }, 12000);
             google.script.run
                 .withSuccessHandler(function(res) {
-                    if (res && res.success) apply(res.draft || null, false);
-                    else apply(null, true);
+                    clearTimeout(timer);
+                    if (!settled) {
+                        settled = true;
+                        if (res && res.success) apply(res.draft || null, false);
+                        else apply(null, true);
+                    } else if (res && res.success && res.draft && draftDate === date) {
+                        loadDraftForDate(date, 'merge', function(n, ex) {
+                            if (exportModalOpen()) renderExport();
+                            showFx('success', '雲端暫存已補讀回', '個別拉選 ' + n + ' 筆、已匯出 ' + ex + ' 人', 2600);
+                        });
+                    }
                 })
-                .withFailureHandler(function() { apply(null, true); })
+                .withFailureHandler(function() {
+                    clearTimeout(timer);
+                    if (settled) return;
+                    settled = true;
+                    apply(null, true);
+                })
                 .loadExportDraftCloud(date);
         }
 
@@ -2895,8 +2905,32 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         });
 
         // v6.3：面板＝純「套針劑並產檔」——先載名單再繪，只出現當次有名單的疫苗容器
+        var openSeq = 0;   // v6.6.1：每次開面板的序號（舊的回應不得覆蓋新的畫面）
+
+        // v6.6.1：載入失敗／逾時不再無限轉圈——顯示原因＋重試
+        function exportPanelError(title, detail) {
+            var body = document.getElementById('exportBody');
+            if (!body) return;
+            body.className = '';
+            body.innerHTML = '<div class="exp-empty-state" style="color:#c62828;"><div style="font-size:2.4rem;">⚠️</div>' +
+                '<div style="font-weight:700;margin:6px 0;">' + escAttr(title) + '</div>' +
+                '<div style="font-size:0.9rem;color:#64748b;white-space:pre-line;">' + escAttr(detail || '') + '</div>' +
+                '<button type="button" class="modal-btn modal-btn-primary" style="margin-top:16px;" onclick="openExport()">🔄 重試</button></div>';
+        }
+
+        function exportLoading() {
+            var body = document.getElementById('exportBody');
+            return !!(body && body.querySelector('.hourglass-loader'));
+        }
+
         function openExport() {
             expOutpost = false;   // 每次開面板重設為所內
+            var seq = ++openSeq;
+            setTimeout(function() {   // 看門狗：40 秒還在轉 → 顯示逾時＋重試
+                if (seq === openSeq && exportModalOpen() && exportLoading()) {
+                    exportPanelError('載入逾時', 'Google 伺服器 40 秒沒有回應（可能是網路或 Google 忙碌）。\n已做的拉選與匯出紀錄都存在雲端／本機，不會遺失，請按重試。');
+                }
+            }, 40000);
             document.getElementById('exportModal').classList.add('show');
             document.getElementById('exportBody').className = '';
             document.getElementById('exportBody').innerHTML =
@@ -2904,13 +2938,24 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 '<div class="empty-state-text pulse-effect">載入名單與暫存中<span class="loading-dots"></span></div></div>';
             google.script.run
                 .withSuccessHandler(function(cfg) {
-                    exportConfig = cfg || { org: '', idCodes: {}, batches: [], lastPick: {} };
-                    renderMainBatches();
-                    loadSlotLists();   // 載完名單＋暫存才 renderExport
+                    if (seq !== openSeq) return;
+                    try {
+                        var prev = exportConfig || {};
+                        exportConfig = cfg || { org: '', idCodes: {}, batches: [], lastPick: {} };
+                        // v6.6.1：保留使用者選的接種日期／劑別（原本每次開面板被伺服器設定蓋掉→日期回到今天，
+                        //         暫存與「已匯出」紀錄就會套到錯的日期）
+                        exportConfig._uiDateIso = prev._uiDateIso;
+                        exportConfig._uiDose = prev._uiDose;
+                        renderMainBatches();
+                        loadSlotLists(seq);   // 載完名單＋暫存才 renderExport
+                    } catch (e) {
+                        console.error(e);
+                        exportPanelError('載入失敗', String((e && e.message) || e));
+                    }
                 })
                 .withFailureHandler(function(err) {
-                    closeExport();
-                    showFx('error', '無法載入設定', (err && err.message) || String(err), 3200);
+                    if (seq !== openSeq) return;
+                    exportPanelError('無法載入設定', (err && err.message) || String(err));
                 })
                 .getNiisExportConfig();
         }
@@ -3370,7 +3415,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 
         // v6.2：容器名單＝HIS 檔的人 ∪ NIIS 名單該類別的人（去重、依姓名排序；NIIS 的人標記來源）
         // v6.3：載完名單才 renderExport（只出現有名單的類別）；v6.6：再讀該接種日期的雲端暫存
-        function loadSlotLists() {
+        function loadSlotLists(seq) {
             var hisSlots = ['k', 'z', 'v'].filter(function(s) { return phisFiles[s]; });
             var reads = hisSlots.map(function(s) { return readFileAsText(phisFiles[s], 'big5'); });
             reads.push(currentFile ? readFileAsText(currentFile, 'big5') : Promise.resolve(''));
@@ -3378,6 +3423,8 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 var hisLists = {};
                 for (var i = 0; i < hisSlots.length; i++) hisLists[hisSlots[i]] = parseFluPersons(texts[i]);
                 var finish = function(famPersons) {
+                    if (seq != null && seq !== openSeq) return;
+                    try {
                     famPersons = famPersons || { corona: [], flu: [], lung: [] };
                     ['k', 'z', 'v'].forEach(function(s) {
                         var merged = (hisLists[s] || []).slice();
@@ -3406,24 +3453,37 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     // v6.6：讀回這個接種日期的雲端暫存（同一次開頁已讀過就不重讀）
                     var date = isoToRoc((exportConfig && exportConfig._uiDateIso) || todayISO());
                     var after = function(n, ex) {
-                        renderExport();
-                        refreshMainListBadges();
+                        if (seq != null && seq !== openSeq) return;
+                        try {
+                            renderExport();
+                            refreshMainListBadges();
+                        } catch (e2) {
+                            console.error(e2);
+                            exportPanelError('畫面繪製失敗', String((e2 && e2.message) || e2));
+                            return;
+                        }
                         if (n > 0 || ex > 0) {
                             showFx('success', '已讀回暫存', '民國 ' + date + '：個別拉選 ' + n + ' 筆、已匯出 ' + ex + ' 人', 2600);
                         }
                     };
                     if (draftDate === date) after(0, 0);
                     else loadDraftForDate(date, 'merge', after);
+                    } catch (e) {
+                        console.error(e);
+                        exportPanelError('名單處理失敗', String((e && e.message) || e));
+                    }
                 };
                 var niisText = texts[texts.length - 1];
                 if (!niisText) { finish(null); return; }
                 google.script.run
                     .withSuccessHandler(finish)
-                    .withFailureHandler(function() { finish(null); })
+                    .withFailureHandler(function(err) {
+                        if (seq != null && seq !== openSeq) return;
+                        exportPanelError('NIIS 名單解析失敗', (err && err.message) || String(err));
+                    })
                     .getNiisFamilyPersons(niisText);
-            }).catch(function() {
-                document.getElementById('exportBody').innerHTML =
-                    '<div class="exp-empty-state" style="color:#e74c3c;">名單讀取失敗，請關閉後重試</div>';
+            }).catch(function(err) {
+                exportPanelError('名單讀取失敗', String((err && err.message) || err));
             });
         }
 
