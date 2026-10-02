@@ -1,5 +1,5 @@
 /*
- * NIIS 最近接種（v1.7）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
+ * NIIS 最近接種（v1.8）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
  *
  * 用途：讀健保卡進到個案接種紀錄頁後點書籤，自動從畫面上的接種紀錄表找出
  *       新冠（CoV…）與流感（Flu…）最近一次接種日、距今天數、新冠 84 天間隔與最快可打日（週四）；
@@ -14,7 +14,7 @@
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v1.7';
+    var VERSION = 'v1.8';
 
     var TOP = document, STATE_KEY = '__niisLastDose';
     if (TOP[STATE_KEY]) { TOP[STATE_KEY].close(); return; }   // 再點一次書籤＝關閉
@@ -250,7 +250,8 @@
         var data = readRecords(docs);
         var body = panel.querySelector('[data-role="body"]');
         if (!data.found) {
-            body.innerHTML = '<div class="err">這一頁找不到接種紀錄表（需有「劑別代號」「接種日」欄）。請進入個案的「預防接種登錄」頁，面板會自動更新（或按 ↻）。</div>' +
+            body.innerHTML = '<div class="err">這一頁找不到接種紀錄表（需有「劑別代號」「接種日」欄）。請進入個案的「預防接種登錄」頁，面板會自動更新（或按 ↻）。' +
+                (/niis/i.test(location.host) ? '' : '<br>這個書籤要在 <b>NIIS</b> 頁面點；想在其他分頁也看到，請在 NIIS 的面板按「📌 浮動」。') + '</div>' +
                 '<div class="sub">診斷（不含個資，可截圖給開發者）：網址 ' + esc(host.location.host + host.location.pathname) + '｜框架 ' + diag.frames + ' 個（無法讀取 ' + diag.blocked + '）｜表格 ' + diag.tables + ' 個' +
                 (diag.heads.length ? '<br>疑似表頭：' + diag.heads.map(esc).join('<br>') : '｜未見含「劑別／接種」的表頭') + '</div>';
             return;
@@ -287,20 +288,22 @@
             btn.textContent = '✅ 已複製，請到掛號平台按 Ctrl+V';
             setTimeout(function () { if (btn.isConnected) btn.innerHTML = oldHtml; }, 2000);
         }
-        var nav = host.defaultView ? host.defaultView.navigator : navigator;
+        // 面板可能在 NIIS 頁面內，也可能在浮動視窗內 → 用面板所在的 document 複製
+        var pdoc = panel ? panel.ownerDocument : host;
+        var nav = pdoc.defaultView ? pdoc.defaultView.navigator : navigator;
         if (nav.clipboard && nav.clipboard.writeText) {
             nav.clipboard.writeText(s).then(done, fallback);
         } else fallback();
         function fallback() {
-            var ta = host.createElement('textarea');
+            var ta = pdoc.createElement('textarea');
             ta.value = s; ta.style.position = 'fixed'; ta.style.opacity = '0';
-            host.body.appendChild(ta); ta.select();
-            try { host.execCommand('copy'); done(); } catch (e) { btn.textContent = '複製失敗，請手動輸入'; }
+            pdoc.body.appendChild(ta); ta.select();
+            try { pdoc.execCommand('copy'); done(); } catch (e) { btn.textContent = '複製失敗，請手動輸入'; }
             ta.remove();
         }
     }
 
-    // 拖曳面板
+    // 拖曳面板（只在 NIIS 頁面內時）
     var dragOn = false, sx, sy, ox, oy;
     function dragMove(e) {
         if (!dragOn) return;
@@ -310,28 +313,81 @@
     }
     function dragUp() { dragOn = false; }
 
+    // ── 浮動視窗（Chrome「文件子母畫面」）：永遠在最上層，切到掛號平台也看得到 ──
+    var pipWin = null, closing = false;
+    var canPip = !!(window.documentPictureInPicture && window.documentPictureInPicture.requestWindow);
+    function openPip() {
+        window.documentPictureInPicture.requestWindow({ width: 440, height: 560 }).then(function (w) {
+            pipWin = w;
+            w.document.title = '最近接種';
+            w.addEventListener('pagehide', function () {
+                pipWin = null;
+                if (closing) return;
+                unmountPanel();
+                mountPanel();             // 關掉浮動視窗 → 面板回到 NIIS 頁面
+            });
+            unmountPanel();
+            mountPanel();
+        }, function (err) {
+            var b = panel && panel.querySelector('[data-role="body"]');
+            if (b) b.insertAdjacentHTML('afterbegin', '<div class="err">浮動視窗開不起來（' + esc((err && err.message) || '瀏覽器不支援') + '）。請確認使用新版 Chrome／Edge。</div>');
+        });
+    }
+
     function onPanelClick(e) {
         var t = e.target.closest ? e.target.closest('[data-act]') : e.target;
         if (!t) return;
         var act = t.getAttribute('data-act');
         if (act === 'close') return close();
         if (act === 'refresh') { render(); return; }
+        if (act === 'pip') { if (pipWin) pipWin.close(); else openPip(); return; }
         if (act === 'copyId' && pid) { copyText(pid, t); return; }
     }
 
-    function unmount() {
-        if (mo) { mo.disconnect(); mo = null; }
-        clearTimeout(timer);
+    function unmountPanel() {
         try {
-            host.removeEventListener('mousemove', dragMove);
-            host.removeEventListener('mouseup', dragUp);
-            panel.remove();
-            css.remove();
+            if (panel) panel.ownerDocument.removeEventListener('mousemove', dragMove);
+            if (panel) panel.ownerDocument.removeEventListener('mouseup', dragUp);
+            if (panel) panel.remove();
+            if (css) css.remove();
         } catch (e) { /* 框架已換頁，舊 document 已失效 */ }
         panel = css = null;
     }
 
-    function mount() {
+    function mountPanel() {
+        var doc = pipWin ? pipWin.document : host;
+        css = doc.createElement('style');
+        css.textContent = CSS_TEXT + (pipWin
+            ? 'body{margin:0;background:#fff}#niis-ld-panel{position:static;width:auto;max-height:none;min-height:100vh;border-radius:0;box-shadow:none}#niis-ld-panel .qh{cursor:default}'
+            : '');
+        (doc.head || doc.body).appendChild(css);
+        panel = doc.createElement('div');
+        panel.id = PANEL_ID;
+        panel.innerHTML =
+            '<div class="qh"><b>💉 最近接種（新冠／流感）</b>' +
+            (canPip ? '<button data-act="pip" title="' + (pipWin ? '收回到 NIIS 頁面' : '變成浮動視窗：切到其他分頁也持續顯示') + '">' + (pipWin ? '↙ 收回' : '📌 浮動') + '</button>' : '') +
+            '<button data-act="refresh" title="重新讀取畫面">↻</button><button data-act="close" title="關閉（再點書籤也可關閉）">✕</button></div>' +
+            '<div class="qb" data-role="body"></div>' +
+            '<div class="ft">' + VERSION + '｜唯讀・只複製身分證到剪貼簿・不保存</div>';
+        doc.body.appendChild(panel);
+        panel.addEventListener('click', onPanelClick);
+        if (!pipWin) {
+            panel.querySelector('.qh').addEventListener('mousedown', function (e) {
+                if (e.target.tagName === 'BUTTON') return;
+                dragOn = true; sx = e.clientX; sy = e.clientY;
+                var r = panel.getBoundingClientRect(); ox = r.left; oy = r.top;
+                e.preventDefault();
+            });
+            doc.addEventListener('mousemove', dragMove);
+            doc.addEventListener('mouseup', dragUp);
+        }
+        render();
+    }
+
+    // 找 NIIS 內容頁、監看它的局部更新（換人但沒整頁重載時自動重讀）
+    function watchPage() {
+        if (mo) { mo.disconnect(); mo = null; }
+        clearTimeout(timer);
         var h = pickHost();
         host = h.doc;
         if (h.frame !== frameEl) {
@@ -339,52 +395,38 @@
             frameEl = h.frame;
             if (frameEl) frameEl.addEventListener('load', onFrameLoad);
         }
-        css = host.createElement('style');
-        css.textContent = CSS_TEXT;
-        (host.head || host.body).appendChild(css);
-        panel = host.createElement('div');
-        panel.id = PANEL_ID;
-        panel.innerHTML =
-            '<div class="qh"><b>💉 最近接種（新冠／流感）</b><button data-act="refresh" title="重新讀取畫面">↻</button><button data-act="close" title="關閉（再點書籤也可關閉）">✕</button></div>' +
-            '<div class="qb" data-role="body"></div>' +
-            '<div class="ft">' + VERSION + '｜唯讀・只複製身分證到剪貼簿・不保存</div>';
-        host.body.appendChild(panel);
-        panel.addEventListener('click', onPanelClick);
-        panel.querySelector('.qh').addEventListener('mousedown', function (e) {
-            if (e.target.tagName === 'BUTTON') return;
-            dragOn = true; sx = e.clientX; sy = e.clientY;
-            var r = panel.getBoundingClientRect(); ox = r.left; oy = r.top;
-            e.preventDefault();
-        });
-        host.addEventListener('mousemove', dragMove);
-        host.addEventListener('mouseup', dragUp);
-        // 頁面局部更新（沒整頁重載）時自動重讀
         var W = host.defaultView || window;
-        if (W.MutationObserver) {
-            var p = panel;
+        if (W.MutationObserver && host.body) {
             mo = new W.MutationObserver(function (list) {
-                if (list.every(function (m) { return p.contains(m.target); })) return;
+                if (panel && list.every(function (m) { return panel.contains(m.target); })) return;
                 clearTimeout(timer);
                 timer = setTimeout(render, 400);
             });
             mo.observe(host.body, { childList: true, subtree: true });
         }
-        render();
     }
 
-    // 內容框架換頁（換下一位）→ 自動在新頁面重掛面板
+    // 內容框架換頁（換下一位）→ 重新監看；面板在頁面內就重掛，在浮動視窗則直接更新
     function onFrameLoad() {
-        unmount();
-        setTimeout(mount, 200);
+        if (!pipWin) unmountPanel();
+        setTimeout(function () {
+            watchPage();
+            if (pipWin) render(); else mountPanel();
+        }, 200);
     }
 
     function close() {
-        unmount();
+        closing = true;
+        if (mo) { mo.disconnect(); mo = null; }
+        clearTimeout(timer);
+        unmountPanel();
+        if (pipWin) pipWin.close();
         if (frameEl) frameEl.removeEventListener('load', onFrameLoad);
         frameEl = null;
         try { delete TOP[STATE_KEY]; } catch (e) { TOP[STATE_KEY] = null; }
     }
     TOP[STATE_KEY] = { close: close };
 
-    mount();
+    watchPage();
+    mountPanel();
 })();
