@@ -1,5 +1,5 @@
 /**
- * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.8.5)
+ * 佳里區衛生所 - 疫苗掛號對針統計系統 (v6.8.8)
  *
  * v3.0 變更：
  *  - 移除 Phis 驗證（6Z / 6V / 6k）全部後端邏輯，僅保留 NIIS 名單統計
@@ -150,6 +150,8 @@
  *    FluAdj（東洋輔流禦 FLUAD）機構專用預設鎖定
  * v6.8.5：年齡規則定案——未滿 7 歲算到日、7 歲以上（含 7）只看出生年（ageOf：exact < 7）；
  *    公費門檻錯誤訊息改以年次表示（需民國 X 年次（含）以前出生）
+ * v6.8.8：analyzeNIIS 記錄新冠掛號代號 idCovCodeMap（XFGK／LPB…），niisPersonsByFam_／getNiisFamilyPersons 回傳 vcode，
+ *    前端據此分成人莫／幼兒莫（多劑型）
  */
 
 function doGet() {
@@ -360,6 +362,7 @@ function analyzeNIIS(jnContent, config) {
     if (doseCol === -1 && (hv.indexOf('劑次') !== -1 || hv.indexOf('劑別') !== -1)) doseCol = hc;
   }
   var idFCodeMap = {};        // 流感受種者 id -> F 對象別代碼
+  var idCovCodeMap = {};      // v6.8.8：新冠受種者 id -> 掛號代號（XFGK／LPB…）
   var idSexMap = {}, idAddrMap = {}, idPhoneMap = {}, idDoseMap = {};
 
   for (var i = 1; i < rows.length; i++) {
@@ -399,6 +402,13 @@ function analyzeNIIS(jnContent, config) {
     }
     idCategoryCount[id][cat]++;
 
+    // v6.8.8：新冠列記錄掛號代號（XFG／XFGK／XFGB／LP／LPK／LPB…，取「代號 - 中文」的代號部分）
+    //         K＝兒童（5 歲）、B＝幼兒（6 個月～4 歲）→ 前端據此分「成人莫／幼兒莫（多劑型）」
+    if (keyFamily[cat] === 'corona' && !idCovCodeMap[id]) {
+      var vc = String(raw || '').split(/[\s\-－(（]/)[0].trim().toUpperCase();
+      if (vc) idCovCodeMap[id] = vc;
+    }
+
     // 流感列記錄 F 對象別代碼
     if (keyFamily[cat] === 'flu' && identityCol >= 0 && !idFCodeMap[id]) {
       var fc = (row[identityCol] || '').toString().trim().toUpperCase();
@@ -414,6 +424,7 @@ function analyzeNIIS(jnContent, config) {
     unrecognized: unrecognized,
     warnPersons: warnPersons,
     idFCodeMap: idFCodeMap,
+    idCovCodeMap: idCovCodeMap,
     hasIdentityCol: identityCol >= 0,
     idSexMap: idSexMap, idAddrMap: idAddrMap, idPhoneMap: idPhoneMap, idDoseMap: idDoseMap
   };
@@ -435,7 +446,8 @@ function niisPersonsByFam_(jnContent, config, keyFam) {
         addr: (data.idAddrMap || {})[id] || '',
         phone: (data.idPhoneMap || {})[id] || '',
         dose: (data.idDoseMap || {})[id] || '',
-        fcode: (data.idFCodeMap || {})[id] || ''
+        fcode: (data.idFCodeMap || {})[id] || '',
+        vcode: fam === 'corona' ? ((data.idCovCodeMap || {})[id] || '') : ''
       };
     }
   }
@@ -454,7 +466,7 @@ function getNiisFamilyPersons(jnContent) {
       var arr = [];
       for (var id in byFam[fam]) {
         var p = byFam[fam][id];
-        arr.push({ id: id, name: p.name || id, birth: p.birth, sex: p.sex, fcode: p.fcode });
+        arr.push({ id: id, name: p.name || id, birth: p.birth, sex: p.sex, fcode: p.fcode, vcode: p.vcode });
       }
       arr.sort(function(a, b) { return a.name.localeCompare(b.name, 'zh-Hant'); });
       out[fam] = arr;

@@ -2768,7 +2768,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.8.7</div>
+    <div class="version-tag">v6.8.8</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3434,7 +3434,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 if (isCov) h += '<div class="setup-flu setup-cov"><div class="setup-flu-cap">🦠 新冠 6K</div>';
                 h += '<div class="setup-row"><span class="setup-lbl">' +
                     (isFlu ? '👴 老人流感<small class="setup-lbl-sub">7 歲以上・' + adultCount('z') + ' 人</small>'
-                           : (isCov ? '🧑 成人莫<small class="setup-lbl-sub">單劑型・12 歲以上・' + adultCount('k') + ' 人</small>' : NAMES[s])) + '</span>' +
+                           : (isCov ? '🧑 成人莫<small class="setup-lbl-sub">單劑型 XFG／LP・' + adultCount('k') + ' 人</small>' : NAMES[s])) + '</span>' +
                     '<select class="s-input" style="flex:1;min-width:0;" onchange="setupState.batch[\'' + s + '\'] = parseInt(this.value, 10)">' +
                     '<option value="-1">— 不設定 —</option>';
                 var firstOk = setupUsableIdx(s)[0];
@@ -3668,10 +3668,16 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             var roc = currentRocDate(), max = slot === 'k' ? KID_MAX_AGE_COVID : KID_MAX_AGE, n = 0;
             (slotPersonList[slot] || []).forEach(function(p) {
                 if (exportedIds[slot][p.id]) return;
+                if (slot === 'k' && p.vcode) { if (!isKidCovCode(p.vcode)) n++; return; }   // v6.8.8：依掛號代號
                 var a = ageOfJs(p.birth, roc);
                 if (a != null && a > max) n++;
             });
             return n;
+        }
+
+        // v6.8.8：新冠掛號代號 XFGK／LPK（兒童 5 歲）、XFGB／LPB（幼兒 6 個月～4 歲）＝幼兒莫（多劑型）
+        function isKidCovCode(c) {
+            return /^(XFG|LP)[KB]$/.test(String(c || '').toUpperCase());
         }
 
         function noBirthCount(slot) {
@@ -3696,6 +3702,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             (slotPersonList[slot] || []).forEach(function(p) {
                 if (exportedIds[slot][p.id]) return;
                 var a = ageOfJs(p.birth, roc);
+                if (slot === 'k' && p.vcode) {   // v6.8.8：新冠有掛號代號 → 直接看代號（與現場勾選類別一致）
+                    if (isKidCovCode(p.vcode)) out.push({ p: p, age: a });
+                    return;
+                }
                 if (a != null && a <= max) out.push({ p: p, age: a });
             });
             return out;
@@ -3704,7 +3714,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         // v6.8.6：「🧒 幼兒莫（多劑型）」列（放在新冠框內、成人莫下方）——批號看不出劑型，預設同成人、由使用者選
         function kidCovidRowsHtml() {
             var kids = kidCandidates('k');
-            var h = '<div class="setup-row"><span class="setup-lbl">🧒 幼兒莫<small class="setup-lbl-sub">多劑型・未滿 12 歲・' + kids.length + ' 人</small></span>';
+            var h = '<div class="setup-row"><span class="setup-lbl">🧒 幼兒莫<small class="setup-lbl-sub">多劑型 XFGK／XFGB／LPK／LPB・' + kids.length + ' 人</small></span>';
             if (kids.length) {
                 h += '<select class="s-input" style="flex:1;min-width:0;" onchange="setupState.kidBatchK = parseInt(this.value, 10)">' +
                     '<option value="-1">— 同成人莫針劑 —</option>';
@@ -3715,7 +3725,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 });
                 h += '</select>';
             } else {
-                h += '<span class="setup-note" style="margin:0;">名單中沒有未滿 12 歲的人</span>';
+                h += '<span class="setup-note" style="margin:0;">名單中沒有兒童／幼兒莫（XFGK／XFGB／LPK／LPB）掛號</span>';
             }
             return h + '</div>';
         }
@@ -4530,6 +4540,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                                 for (var mi = 0; mi < merged.length; mi++) {
                                     if (merged[mi].id !== p.id) continue;
                                     if (!merged[mi].fcode && p.fcode) merged[mi].fcode = p.fcode;
+                                    if (!merged[mi].vcode && p.vcode) merged[mi].vcode = p.vcode;   // v6.8.8 新冠掛號代號
                                     if ((!merged[mi].name || merged[mi].name === merged[mi].id) && p.name) merged[mi].name = p.name;
                                     if (!merged[mi].birth && p.birth) merged[mi].birth = p.birth;
                                     break;
@@ -4538,7 +4549,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                             }
                             seen[p.id] = true;
                             merged.push({ id: p.id, name: p.name || p.id, birth: p.birth || '',
-                                          sex: p.sex || '', fcode: p.fcode || '', src: 'niis' });
+                                          sex: p.sex || '', fcode: p.fcode || '', vcode: p.vcode || '', src: 'niis' });
                         });
                         merged.sort(function(a, b) { return a.name.localeCompare(b.name, 'zh-Hant'); });
                         slotPersonList[s] = merged;
