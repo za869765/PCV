@@ -1760,6 +1760,17 @@ input.adjustment-input-field::-webkit-outer-spin-button {
 .multi-id-more { font-size: 12px; color: #92400e; }
 
 /* v6.8.2：快速設定幼兒區 */
+/* v6.8.7：缺出生日期提示 */
+.setup-nobirth {
+    font-size: 12.5px;
+    color: #b45309;
+    background: #fffbeb;
+    border: 1px dashed #fcd34d;
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin-top: 6px;
+}
+
 /* v6.8.4：流感兩種針（老人／幼兒）同框 */
 .setup-flu {
     background: #eff6ff;
@@ -2757,7 +2768,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.8.6</div>
+    <div class="version-tag">v6.8.7</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3435,10 +3446,12 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 h += '</select></div>';
                 if (isCov) {
                     h += kidCovidRowsHtml();           // 🧒 幼兒莫（多劑型）
+                    h += noBirthNoteHtml('k');
                     h += '</div>';
                 }
                 if (isFlu) {
                     h += kidRowsHtml();                // 👶 幼兒流感：針劑＋F01＋年齡上限
+                    h += noBirthNoteHtml('z');
                     h += unlockToggleHtml('flu');      // 機構專用針劑解鎖
                     h += '</div>';
                 }
@@ -3650,10 +3663,28 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return -1;
         }
 
+        // v6.8.7：成人＝未匯出、算得出年齡、且不是幼兒；缺出生日期（年齡不明）另計，不混進成人
         function adultCount(slot) {
-            var n = 0;
-            (slotPersonList[slot] || []).forEach(function(p) { if (!exportedIds[slot][p.id]) n++; });
-            return n - kidCandidates(slot).length;
+            var roc = currentRocDate(), max = slot === 'k' ? KID_MAX_AGE_COVID : KID_MAX_AGE, n = 0;
+            (slotPersonList[slot] || []).forEach(function(p) {
+                if (exportedIds[slot][p.id]) return;
+                var a = ageOfJs(p.birth, roc);
+                if (a != null && a > max) n++;
+            });
+            return n;
+        }
+
+        function noBirthCount(slot) {
+            var roc = currentRocDate(), n = 0;
+            (slotPersonList[slot] || []).forEach(function(p) {
+                if (!exportedIds[slot][p.id] && ageOfJs(p.birth, roc) == null) n++;
+            });
+            return n;
+        }
+
+        function noBirthNoteHtml(slot) {
+            var n = noBirthCount(slot);
+            return n ? '<div class="setup-nobirth">⚠ 缺出生日期 <b>' + n + '</b> 人：年齡不明，無法分成人／幼兒，會留在「待處理」（請補出生日期或個別處理）</div>' : '';
         }
 
         // 幼兒名單：未匯出、流感未滿 7 歲／新冠未滿 12 歲
