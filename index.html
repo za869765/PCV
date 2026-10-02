@@ -2488,7 +2488,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.7</div>
+    <div class="version-tag">v6.7.1</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3687,10 +3687,13 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 var on = String(f.ageMin) === a[1] && String(f.ageMax) === a[2];
                 h += '<button type="button" class="f-chip' + (on ? ' on' : '') + '" data-min="' + a[1] + '" data-max="' + a[2] + '" onclick="setAgeFilter(' + q + ',\'' + a[1] + '\',\'' + a[2] + '\')">' + a[0] + '</button>';
             });
-            var sts = [['all', '全部狀態'], ['pending', '⚠ 待處理'], ['ready', '✔ 可匯出（已處理、未匯出）'], ['exported', '✅ 已匯出']];
+            // v6.7.1：「優先公費對象」＝設定無爭議的人（符合門檻、用主選針劑、沒有個別拉選），放最上面
+            var sts = [['default', '🟢 優先公費對象'], ['all', '全部狀態'], ['pending', '⚠ 待處理'],
+                       ['ready', '✔ 可匯出（已處理、未匯出）'], ['exported', '✅ 已匯出']];
             if (slot === 'z') sts.push(['special', '⭐ 特殊身分別（個別拉選）']);
-            sts.push(['ownbatch', '💉 已個別指定針劑'], ['mainbatch', '○ 用主選針劑']);
-            h += '<select class="s-input" id="fst_' + slot + '" onchange="onFilterInput(' + q + ')">';
+            sts.push(['ownbatch', '💉 已個別指定針劑']);
+            h += '<select class="s-input" id="fst_' + slot + '" onchange="onFilterInput(' + q + ')" data-tip="🟢 優先公費對象＝設定沒有爭議的人：&#10;' +
+                (slot === 'z' ? '年齡符合公費門檻、自動帶預設身分別、' : '') + '用主選針劑、沒有個別拉選、尚未匯出&#10;可放心「全選」一起處理">';
             sts.forEach(function(o) { h += '<option value="' + o[0] + '"' + (f.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; });
             h += '</select>';
             h += '<select class="s-input" id="fsrc_' + slot + '" onchange="onFilterInput(' + q + ')">';
@@ -4081,7 +4084,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 case 'exported':  if (!info.ex) return false; break;
                 case 'special':   if (!info.code) return false; break;
                 case 'ownbatch':  if (!info.ownBatch) return false; break;
-                case 'mainbatch': if (info.ownBatch) return false; break;
+                case 'default':   // 優先公費對象：未匯出、無待處理、用主選針劑、無個別拉選；流感另需靠年齡帶預設（無檔內特殊身分別）
+                    if (info.ex || info.pending || info.ownBatch || info.code) return false;
+                    if (slot === 'z' && p.fcode) return false;
+                    break;
             }
             if (f.src !== 'all' && (p.src === 'niis' ? 'niis' : 'his') !== f.src) return false;
             if (f.sex && f.sex !== 'all' && sexOf(p) !== f.sex) return false;
