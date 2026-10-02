@@ -1549,6 +1549,32 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     color: #fff;
 }
 
+/* v6.7.2：多重身分提醒（優先公費對象中可能有醫事人員等） */
+.multi-id {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: #78350f;
+}
+
+.multi-id-btns {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.multi-id-more { font-size: 12px; color: #92400e; }
+
+.setup-sec.setup-warn {
+    background: #fffbeb;
+    border-color: #fcd34d;
+}
+
 /* v6.7：機構專用針劑解鎖勾選 */
 .unlock-tg {
     display: inline-flex;
@@ -2488,7 +2514,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.7.1</div>
+    <div class="version-tag">v6.7.2</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3156,6 +3182,11 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             h += '<div class="setup-sec"><div class="setup-cap">🧾 身分別</div><div class="setup-note">' +
                 '新冠：依年齡自動判讀｜流感：符合門檻者自動帶 <b>' + escAttr(setupState.outpost ? fout : fin) + '</b>，' +
                 '未達門檻者留在「待處理」個別拉選｜肺鏈：免填</div></div>';
+            if ((slotPersonList.z || []).length) {   // v6.7.2：多重身分提醒
+                h += '<div class="setup-sec setup-warn"><div class="setup-cap">⚠️ 多重身分提醒</div><div class="setup-note">' +
+                    '符合年齡門檻的人會自動帶預設 <b>' + escAttr(setupState.outpost ? fout : fin) + '</b>；若其中有人<b>同時是醫事人員、防疫人員</b>等特殊身分，' +
+                    '應改拉選 F07A／F07B／F07C／F09…（個別拉選優先於預設）。系統無法自動得知誰是醫事人員，一鍵寫入後會詢問是否先檢視「🟢 優先公費對象」清單。</div></div>';
+            }
             h += '<div class="setup-foot">按「是，一鍵寫入」後，清單只顯示 <b>待處理</b> 的人；隨時可按下方「🔄 重置」重新設定。</div>';
             document.getElementById('setupBody').innerHTML = h;
         }
@@ -3197,9 +3228,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             renderExport();
             refreshMainListBadges();
             scheduleDraftSave();
-            var st = slotStats();
-            showFx('success', '已一鍵寫入', '主選針劑與預設身分別已套用（' + (expOutpost ? '所外' : '所內') + '）\n' +
-                (st.pending ? '剩 ' + st.pending + ' 人待處理，清單只顯示這些人' : '全部都處理好了，可以直接產生並下載'), 3200);
+            askReviewPriority(slotStats());   // v6.7.2：多重身分提醒
         }
 
         // 「🔄 重置」：清掉主選針劑、個別拉選、場次、篩選與縮放，當作第一次進來並重新詢問設定（已匯出紀錄保留）
@@ -3625,6 +3654,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 // 名單：篩選列＋勾選＋批次套用＋個別拉選
                 html += '<div style="margin-top:12px;">';
                 html += filterBarHtml(slot);
+                if (slot === 'z') html += multiIdBannerHtml();   // v6.7.2：篩選優先公費對象時顯示
                 html += '<div class="flu-tools">';
                 html += '<button type="button" class="s-btn s-copy" data-tip="勾選清單上看得到的所有人&#10;有篩選時只勾篩選出來的人（被篩掉的不會勾）&#10;Shift＋點勾選框＝連續勾選一段" onclick="slotCheckAllG(\'' + slot + '\', true)">全選</button>';
                 html += '<button type="button" class="s-btn s-copy" onclick="slotCheckAllG(\'' + slot + '\', false)">全不選</button>';
@@ -4076,6 +4106,68 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                      code: code, reasons: reasons, pending: reasons.length > 0, idBad: idBad };
         }
 
+        // 優先公費對象：未匯出、無待處理、用主選針劑、無個別拉選；流感另需靠年齡帶預設（無檔內特殊身分別）
+        function isPriorityRow(slot, info) {
+            if (info.ex || info.pending || info.ownBatch || info.code) return false;
+            if (slot === 'z' && info.p.fcode) return false;
+            return true;
+        }
+
+        function countPriority(slot) {
+            var list = slotPersonList[slot] || [], n = 0;
+            for (var i = 0; i < list.length; i++) {
+                if (document.getElementById(rowIdOf(slot, i)) && isPriorityRow(slot, rowInfo(slot, i))) n++;
+            }
+            return n;
+        }
+
+        /* ===== v6.7.2：多重身分提醒——符合年齡門檻（優先公費對象）的人可能同時是醫事人員等，
+           系統無法自動得知，故提醒檢視並提供常用工作身分代碼一鍵改（個別拉選優先於預設） ===== */
+        var MULTI_ID_CODES = ['F07A', 'F07B', 'F07C', 'F09'];
+
+        function multiIdBannerHtml() {
+            var fcl = fluCodeList();
+            var h = '<div class="multi-id" id="multiIdBanner" style="display:none;">' +
+                '<div>⚠️ <b>多重身分提醒</b>：以下的人目前都會帶預設 <b>' + escAttr(fluDefaultCode()) + '</b>。' +
+                '若有人<b>同時是醫事人員、防疫人員</b>等特殊身分，請勾選後按下方代碼直接改身分別（改完會從這個清單移除）。</div>' +
+                '<div class="multi-id-btns">';
+            MULTI_ID_CODES.forEach(function(code) {
+                var hit = null;
+                for (var i = 0; i < fcl.length; i++) { if (fcl[i].code === code) { hit = fcl[i]; break; } }
+                if (!hit) return;   // 代碼表沒有這個代碼就不顯示
+                var lbl = String(hit.label || '');
+                h += '<button type="button" class="s-btn s-copy" data-tip="把勾選的人改成 ' + escAttr(code + ' ' + lbl) + '" onclick="applyFluQuick(\'' + code + '\')">' +
+                    escAttr(code) + ' ' + escAttr(lbl.length > 10 ? lbl.slice(0, 10) + '…' : lbl) + '</button>';
+            });
+            h += '<span class="multi-id-more">其他身分別請用上方「批次套用的身分別」選單</span></div></div>';
+            return h;
+        }
+
+        function applyFluQuick(code) {
+            var sel = document.getElementById('fluBatchCode');
+            if (sel) sel.value = code;
+            applyFluBatch();
+        }
+
+        // 一鍵寫入後：有優先公費對象就詢問要不要先檢視（找出醫事人員等多重身分）
+        function askReviewPriority(st) {
+            var n = (slotPersonList.z || []).length ? countPriority('z') : 0;
+            var head = '主選針劑與預設身分別已套用（' + (expOutpost ? '所外' : '所內') + '）';
+            if (!n) {
+                showFx('success', '已一鍵寫入', head + '\n' +
+                    (st.pending ? '剩 ' + st.pending + ' 人待處理，清單只顯示這些人' : '全部都處理好了，可以直接產生並下載'), 3200);
+                return;
+            }
+            showConfirm('多重身分提醒', head + '。\n\n流感「優先公費對象」共 ' + n + ' 人會帶預設 ' + fluDefaultCode() + '，\n' +
+                '其中若有醫事人員、防疫人員等多重身分，需改拉選 F07A／F07B／F09…\n\n' +
+                '要先檢視這 ' + n + ' 人嗎？' + (st.pending ? '\n（取消＝直接處理待處理的 ' + st.pending + ' 人）' : ''),
+                function() {
+                    slotFilter.z.status = 'default';
+                    writeFilter('z');
+                    refreshSlot('z', false);
+                }, '🩺');
+        }
+
         function matchFilter(slot, info) {
             var f = slotFilter[slot], p = info.p;
             switch (f.status) {
@@ -4084,10 +4176,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 case 'exported':  if (!info.ex) return false; break;
                 case 'special':   if (!info.code) return false; break;
                 case 'ownbatch':  if (!info.ownBatch) return false; break;
-                case 'default':   // 優先公費對象：未匯出、無待處理、用主選針劑、無個別拉選；流感另需靠年齡帶預設（無檔內特殊身分別）
-                    if (info.ex || info.pending || info.ownBatch || info.code) return false;
-                    if (slot === 'z' && p.fcode) return false;
-                    break;
+                case 'default':   if (!isPriorityRow(slot, info)) return false; break;
             }
             if (f.src !== 'all' && (p.src === 'niis' ? 'niis' : 'his') !== f.src) return false;
             if (f.sex && f.sex !== 'all' && sexOf(p) !== f.sex) return false;
@@ -4242,6 +4331,10 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                     chip.classList.add('bump');
                 }
                 chip.setAttribute('data-n', String(c.pending || 0));
+            }
+            if (slot === 'z') {   // v6.7.2：只在檢視「優先公費對象」時顯示多重身分提醒
+                var mb = document.getElementById('multiIdBanner');
+                if (mb) mb.style.display = (slotFilter.z.status === 'default' && c.shown) ? '' : 'none';
             }
             var exc = document.getElementById('exc_' + slot);
             if (exc) exc.textContent = c.exported ? '📤 已匯出 ' + c.exported + ' 人' : '';
