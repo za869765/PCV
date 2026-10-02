@@ -14,7 +14,7 @@
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v1.0';
+    var VERSION = 'v1.1';
 
     var old = document.getElementById(PANEL_ID);
     if (old) { if (old._close) old._close(); else old.remove(); return; }   // 再點一次書籤＝關閉
@@ -31,13 +31,18 @@
     function isFlu(code) { return /flu|influ|流感/i.test(code); }
 
     // ── 收集本頁與同網域子框架的 document（NIIS 可能用 iframe） ──
+    var diag = { frames: 0, blocked: 0 };
     function allDocs() {
         var out = [];
+        diag.frames = 0; diag.blocked = 0;
         (function add(doc, depth) {
-            if (!doc || depth > 4) return;
+            if (!doc || depth > 6 || out.indexOf(doc) >= 0) return;
             out.push(doc);
             Array.prototype.forEach.call(doc.querySelectorAll('iframe,frame'), function (f) {
-                try { add(f.contentDocument, depth + 1); } catch (e) { /* 跨網域框架略過 */ }
+                diag.frames++;
+                var d = null;
+                try { d = f.contentDocument || (f.contentWindow && f.contentWindow.document); } catch (e) { d = null; }
+                if (d) add(d, depth + 1); else diag.blocked++;
             });
         })(document, 0);
         return out;
@@ -86,17 +91,29 @@
         return val;
     }
 
-    // ── 讀取接種紀錄表：表頭含「劑別代號」與「接種日」 ──
+    // ── 讀取接種紀錄表：表頭含「劑別」與「接種日」（表頭格文字短，避免誤抓外層排版表格） ──
+    function colOf(cells, re) {
+        for (var k = 0; k < cells.length; k++) {
+            var c = cells[k].replace(/\s/g, '');
+            if (c.length <= 12 && re.test(c)) return k;
+        }
+        return -1;
+    }
     function readRecords(docs) {
         var recs = [], found = false;
+        diag.tables = 0; diag.heads = [];
         docs.forEach(function (doc) {
             Array.prototype.forEach.call(doc.querySelectorAll('table'), function (tb) {
+                diag.tables++;
                 var rows = tb.rows, hi = -1, ci = -1, di = -1, ui = -1;
-                for (var r = 0; r < rows.length && hi < 0; r++) {
+                for (var r = 0; r < rows.length && r < 5 && hi < 0; r++) {
                     var cells = Array.prototype.map.call(rows[r].cells, txt);
-                    if (cells.indexOf('劑別代號') >= 0 && cells.indexOf('接種日') >= 0) {
-                        hi = r; ci = cells.indexOf('劑別代號'); di = cells.indexOf('接種日'); ui = cells.indexOf('接種單位');
+                    var a = colOf(cells, /劑別/), b = colOf(cells, /^接種日(?!期)|^接種日期$/);
+                    if (a >= 0 || colOf(cells, /接種/) >= 0) {
+                        var hd = cells.filter(function (c) { return c.length <= 12; }).join('｜');
+                        if (hd && diag.heads.indexOf(hd) < 0 && diag.heads.length < 6) diag.heads.push(hd);
                     }
+                    if (a >= 0 && b >= 0) { hi = r; ci = a; di = b; ui = colOf(cells, /接種單位/); }
                 }
                 if (hi < 0) return;
                 found = true;
@@ -185,7 +202,9 @@
         var data = readRecords(docs);
         var body = panel.querySelector('[data-role="body"]');
         if (!data.found) {
-            body.innerHTML = '<div class="err">這一頁找不到接種紀錄表（需有「劑別代號」「接種日」欄）。請先讀健保卡進入個案的「預防接種登錄」頁，再點一次書籤或按 ↻。</div>';
+            body.innerHTML = '<div class="err">這一頁找不到接種紀錄表（需有「劑別代號」「接種日」欄）。請先進入個案的「預防接種登錄」頁，再點一次書籤或按 ↻。</div>' +
+                '<div class="sub">診斷（不含個資，可截圖給開發者）：網址 ' + esc(location.host + location.pathname) + '｜框架 ' + diag.frames + ' 個（無法讀取 ' + diag.blocked + '）｜表格 ' + diag.tables + ' 個' +
+                (diag.heads.length ? '<br>疑似表頭：' + diag.heads.map(esc).join('<br>') : '｜未見含「劑別／接種」的表頭') + '</div>';
             return;
         }
         var age = '';
@@ -195,12 +214,15 @@
             age = '｜民國 ' + (birth.getFullYear() - 1911) + ' 年次・' + a + ' 歲';
         }
         var cov = latest(data.recs, isCov), flu = latest(data.recs, isFlu);
+        var codes = [];
+        data.recs.forEach(function (r) { var c = r.code.split(/[-_\s]/)[0]; if (codes.indexOf(c) < 0) codes.push(c); });
         var fluTag = flu.last && flu.last.date >= fluSeasonStart()
             ? '<span class="tag warn">本季（' + (fluSeasonStart().getFullYear() - 1911) + '/10/01 起）已接種</span>'
             : '<span class="tag ok">本季尚未接種</span>';
         var h = '<div class="who">證號：<b>' + (pid ? esc(pid) : '<span style="color:#b91c1c">讀不到</span>') + '</b>' + esc(age) + '</div>' +
             cardHtml('cov', '🦠 新冠最近一次', cov) +
             cardHtml('flu', '🤧 流感最近一次', flu, fluTag) +
+            '<div class="sub">讀到 ' + data.recs.length + ' 筆已接種紀錄' + (codes.length ? '（代號開頭：' + esc(codes.slice(0, 12).join('、')) + '）' : '') + '</div>' +
             '<div class="lbl">要掛哪幾針？（每類選一種，可只選一類）</div><div class="vacs">';
         VACS.forEach(function (v) {
             h += '<button class="vb ' + v.fam + (v.kid ? ' kid' : '') + (picked[v.fam] === v.key ? ' on' : '') + '" data-vac="' + esc(v.key) + '">' +
