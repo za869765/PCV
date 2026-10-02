@@ -2349,7 +2349,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.6.4</div>
+    <div class="version-tag">v6.6.5</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3257,11 +3257,9 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<div class="s-field s-field-grow" data-tip="主選針劑：此類別所有人的預設批號&#10;（清單＝主頁匯入的庫存量檔內容）"><span class="s-cap">針劑（疫苗種類｜批號）</span>';
                 html += '<select class="s-input" id="expBatch_' + slot + '" onchange="onRowChanged(\'' + slot + '\')">';
                 html += '<option value="-1">— 請選擇 —</option>';
-                for (var bi = 0; bi < cfg.batches.length; bi++) {
-                    var b = cfg.batches[bi];
-                    if (b.family && b.family !== fam) continue;
-                    html += '<option value="' + bi + '">' + escAttr(batchOptionLabel(b)) + '</option>';
-                }
+                batchIdxByExpiry(fam).forEach(function(bi) {   // v6.6.5：效期最近的在上
+                    html += '<option value="' + bi + '">' + escAttr(batchOptionLabel(cfg.batches[bi])) + '</option>';
+                });
                 html += '</select></div>';
                 html += '<div class="s-field" data-tip="此類別的預設劑別&#10;HIS 檔內「疫苗劑別」欄有值的人優先用檔內值"><span class="s-cap">預設劑別</span><input class="s-input" id="expDose_' + slot + '" style="width:64px;text-align:center;" value="' + escAttr((cfg._uiDose || {})[slot] || '1') + '"></div>';
                 html += '</div>';
@@ -3270,7 +3268,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 html += '<div style="margin-top:12px;">';
                 html += filterBarHtml(slot);
                 html += '<div class="flu-tools">';
-                html += '<button type="button" class="s-btn s-copy" data-tip="勾選目前篩選出來的所有人&#10;（Shift＋點勾選框＝連續勾選一段）" onclick="slotCheckAllG(\'' + slot + '\', true)">全選篩選結果</button>';
+                html += '<button type="button" class="s-btn s-copy" data-tip="勾選清單上看得到的所有人&#10;有篩選時只勾篩選出來的人（被篩掉的不會勾）&#10;Shift＋點勾選框＝連續勾選一段" onclick="slotCheckAllG(\'' + slot + '\', true)">全選</button>';
                 html += '<button type="button" class="s-btn s-copy" onclick="slotCheckAllG(\'' + slot + '\', false)">全不選</button>';
                 if (slot === 'z') {
                     html += '<select class="s-input" id="fluBatchCode" style="min-width:150px;flex:1;">' + fluOptionsHtml('（批次套用的身分別）') + '</select>';
@@ -3340,7 +3338,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 h += '<option value="' + o[0] + '"' + (f.src === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
             });
             h += '</select>';
-            // v6.6.2：性別篩選（搭配「全選篩選結果」＝批次選某性別）
+            // v6.6.2：性別篩選（搭配「全選」＝批次選某性別）
             h += '<select class="s-input" id="fsex_' + slot + '" onchange="onFilterInput(' + q + ')">';
             [['all', '全部性別'], ['M', '男'], ['F', '女']].forEach(function(o) {
                 h += '<option value="' + o[0] + '"' + (f.sex === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
@@ -3522,14 +3520,28 @@ input.adjustment-input-field::-webkit-outer-spin-button {
             return list;
         }
 
-        function slotBatchOptionsHtml(slot, defaultLabel) {
-            var fam = SLOT_FAMILY[slot];
-            var opts = '<option value="">' + defaultLabel + '</option>';
-            for (var bi = 0; bi < exportConfig.batches.length; bi++) {
-                var b = exportConfig.batches[bi];
-                if (b.family && b.family !== fam) continue;
-                opts += '<option value="' + bi + '">' + escAttr(batchOptionLabel(b)) + '</option>';
+        // v6.6.5：某類別可用針劑的索引，依效期「最近→最久」排序（無效期排最後；同效期依原順序）
+        //         選項值仍是批次索引，只改顯示順序
+        function batchIdxByExpiry(fam) {
+            var list = (exportConfig && exportConfig.batches) || [];
+            var expNum = function(e) {
+                var n = parseInt(String(e == null ? '' : e).replace(/\D/g, ''), 10);
+                return isNaN(n) ? Infinity : n;
+            };
+            var idx = [];
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].family && list[i].family !== fam) continue;
+                idx.push(i);
             }
+            idx.sort(function(a, b) { return (expNum(list[a].exp) - expNum(list[b].exp)) || (a - b); });
+            return idx;
+        }
+
+        function slotBatchOptionsHtml(slot, defaultLabel) {
+            var opts = '<option value="">' + defaultLabel + '</option>';
+            batchIdxByExpiry(SLOT_FAMILY[slot]).forEach(function(bi) {
+                opts += '<option value="' + bi + '">' + escAttr(batchOptionLabel(exportConfig.batches[bi])) + '</option>';
+            });
             return opts;
         }
 
@@ -3948,7 +3960,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
                 var c = document.getElementById(chkIdOf(slot, i));
                 if (c && c.checked && !rowHidden(slot, i) && exportedIds[slot][list[i].id]) ids.push(list[i].id);
             }
-            if (!ids.length) { showModal('請先勾選要取消「已匯出」標記的人\n（可用狀態篩選「✅ 已匯出」＋全選篩選結果）'); return; }
+            if (!ids.length) { showModal('請先勾選要取消「已匯出」標記的人\n（可用狀態篩選「✅ 已匯出」＋全選）'); return; }
             showConfirm('取消已匯出標記', '共 ' + ids.length + ' 人將恢復為「未匯出」，下次下載會再匯出一次。\n只有在 NIIS 匯入失敗、需要重新匯出時才這樣做。\n確定？', function() {
                 ids.forEach(function(id) { delete exportedIds[slot][id]; });
                 onRowChanged(slot);
