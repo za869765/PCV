@@ -1,5 +1,5 @@
 /*
- * NIIS 最近接種（v1.9）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
+ * NIIS 最近接種（v2.1）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
  *
  * 用途：讀健保卡進到個案接種紀錄頁後點書籤，自動從畫面上的接種紀錄表找出
  *       新冠（CoV…）與流感（Flu…）最近一次接種日、距今天數、新冠 84 天間隔與最快可打日（週四）、公費年齡；
@@ -15,7 +15,7 @@
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v1.9';
+    var VERSION = 'v2.1';
     var CLIP_TYPE = 'web application/x-niis-id';   // 剪貼簿自訂格式：標記「這個身分證來自 NIIS」，貼上時只會貼出純身分證
 
     var TOP = document, STATE_KEY = '__niisLastDose';
@@ -215,13 +215,14 @@
         return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
     // ── 依「劑別代號＋批號命名規則」推估廠牌（與對針系統 BRAND_RULES 同規則；僅供參考） ──
+    //   v2.1 依實際批號查證更正：AFLUA/AFLBA＝GSK、FS…＝國光、P100＋6 碼＝東洋（Seqirus）、英數英＋3 碼＋V＝賽諾菲；對不到不猜
     var BRAND_RULES = [
         { brand: '東洋 FLUAD', type: /^FLUADJ/i },
         { brand: '賽諾菲 高劑量', type: /^FLUHD/i },
-        { brand: '賽諾菲', type: /^FLU/i, lot: /^AFLUA/i },
-        { brand: '國光', type: /^FLU/i, lot: /^P\d/i },
-        { brand: 'GSK', type: /^FLU/i, lot: /^F[A-Z]/i },
-        { brand: 'Seqirus', type: /^FLU/i, lot: /^\d+P\d*$/i },
+        { brand: 'GSK 伏流感', type: /^FLU/i, lot: /^AFL[UB]A/i },
+        { brand: '國光 安定伏', type: /^FLU/i, lot: /^FS[A-Z]/i },
+        { brand: '東洋 輔流威護', type: /^FLU/i, lot: /^P100\d{6}$/i },
+        { brand: '賽諾菲 菲流達', type: /^FLU/i, lot: /^[A-Z]\d[A-Z]\d{3}V$/i },
         { brand: 'Moderna', type: /MODERNA/i },
         { brand: 'Novavax', type: /NOVAVAX/i },
         { brand: 'BNT 輝瑞', type: /BIONTECH|BNT|PFIZER/i },

@@ -2768,7 +2768,7 @@ input.adjustment-input-field::-webkit-outer-spin-button {
     </div>
 
     <!-- 版本編號顯示 -->
-    <div class="version-tag">v6.8.9</div>
+    <div class="version-tag">v6.9.1</div>
 
     <script>
         var currentFile = null;   // 目前統計中的 NIIS 檔案（寄信附件用）
@@ -3914,16 +3914,20 @@ input.adjustment-input-field::-webkit-outer-spin-button {
         }
 
         /* ===== v6.6.3：依「疫苗種類＋批號命名規則」推估廠牌（僅顯示參考，不影響匯出） =====
-           流感依原廠批號開頭：AFLUA…＝賽諾菲、P＋數字＝國光、F＋英文字母（FT/FJ/FK…）＝GSK、
-           數字…P…＝Seqirus；種類 FluAdj＝東洋 輔流禦 FLUAD（佐劑，機構專用→預設鎖定）。
+           v6.9.1 依實際批號查證更正（舊規則把 GSK／國光／東洋對調了）：
+             AFLUA／AFLBA…＝GSK 伏流感 Fluarix（馬來西亞 NPRA 放行 AFLUA872AC）
+             FS＋英文…＝國光 安定伏（2024 停用批號 FSZA2408）
+             P100＋6 碼＝東洋 輔流威護（Seqirus Flucelvax，使用者實物確認）
+             英數英＋3 碼＋V＝賽諾菲 菲流達（R3J711V、W3E972V）
+           對不到＝不猜廠牌。種類 FluAdj＝東洋 輔流禦 FLUAD（佐劑，機構專用→預設鎖定）。
            其他類別依種類代號判斷。順序＝由上往下第一個符合即採用。 */
         var BRAND_RULES = [
             { brand: '東洋 輔流禦 FLUAD', type: /^FLUADJ$/i, locked: true },
             { brand: '賽諾菲 高劑量',   type: /^FLUHD$/i },
-            { brand: '賽諾菲',          type: /^FLU/i, lot: /^AFLUA/i },
-            { brand: '國光',            type: /^FLU/i, lot: /^P\d/i },
-            { brand: 'GSK',             type: /^FLU/i, lot: /^F[A-Z]/i },
-            { brand: 'Seqirus',         type: /^FLU/i, lot: /^\d+P\d*$/i },
+            { brand: 'GSK 伏流感',      type: /^FLU/i, lot: /^AFL[UB]A/i },
+            { brand: '國光 安定伏',     type: /^FLU/i, lot: /^FS[A-Z]/i },
+            { brand: '東洋 輔流威護',   type: /^FLU/i, lot: /^P100\d{6}$/i },
+            { brand: '賽諾菲 菲流達',   type: /^FLU/i, lot: /^[A-Z]\d[A-Z]\d{3}V$/i },
             { brand: 'Moderna',         type: /MODERNA/i },
             { brand: 'Novavax',         type: /NOVAVAX/i },
             { brand: '輝瑞 Prevenar 20', type: /^20PCV$/i },
