@@ -1,5 +1,5 @@
 /*
- * NIIS 最近接種（v2.1）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
+ * 疫苗掛號助手 NIIS 端（v2.2；與 quick-lookup.js 由 build.js 合併成同一個書籤）— 全國性預防接種資訊管理系統「預防接種登錄」頁輔助工具
  *
  * 用途：讀健保卡進到個案接種紀錄頁後點書籤，自動從畫面上的接種紀錄表找出
  *       新冠（CoV…）與流感（Flu…）最近一次接種日、距今天數、新冠 84 天間隔與最快可打日（週四）、公費年齡；
@@ -15,7 +15,7 @@
 (function () {
     'use strict';
     var PANEL_ID = 'niis-ld-panel';
-    var VERSION = 'v2.1';
+    var VERSION = 'v2.2';
     var CLIP_TYPE = 'web application/x-niis-id';   // 剪貼簿自訂格式：標記「這個身分證來自 NIIS」，貼上時只會貼出純身分證
 
     var TOP = document, STATE_KEY = '__niisLastDose';
@@ -137,7 +137,7 @@
 
     // ── 面板 ──
     var CSS_TEXT =
-        '#niis-ld-panel{position:fixed;top:60px;right:16px;width:440px;max-height:calc(100vh - 80px);z-index:99999;background:#fff;' +
+        '#niis-ld-panel{position:fixed;top:60px;right:16px;width:720px;max-width:calc(100vw - 32px);max-height:calc(100vh - 80px);z-index:99999;background:#fff;' +
         'border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.3);font:14px/1.5 "Noto Sans TC","Microsoft JhengHei",sans-serif;color:#1e293b;display:flex;flex-direction:column;overflow:hidden;text-align:left}' +
         '#niis-ld-panel *{box-sizing:border-box}' +
         '#niis-ld-panel .qh{background:linear-gradient(135deg,#00796b,#1565c0);color:#fff;padding:8px 10px;display:flex;align-items:center;gap:6px;cursor:move;user-select:none}' +
@@ -145,7 +145,10 @@
         '#niis-ld-panel .hb{background:rgba(15,23,42,.28);border:1px solid rgba(255,255,255,.6);color:#fff;border-radius:8px;padding:4px 11px;cursor:pointer;font:inherit;font-size:13.5px;font-weight:700;transition:background .15s,transform .1s}' +
         '#niis-ld-panel .hb:hover{background:rgba(255,255,255,.38)}#niis-ld-panel .hb:active{transform:scale(.94)}' +
         '#niis-ld-panel .hb.x{padding:4px 10px}#niis-ld-panel .hb.x:hover{background:#dc2626;border-color:#dc2626}' +
-        '#niis-ld-panel .qb{padding:10px 12px;overflow-y:auto;display:flex;flex-direction:column;gap:9px}' +
+        '#niis-ld-panel .qb{padding:10px 12px;overflow-y:auto;display:flex;flex-direction:column;gap:9px;container-type:inline-size}' +
+        '#niis-ld-panel .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:start}#niis-ld-panel .cols.one{grid-template-columns:minmax(0,1fr)}' +
+        '#niis-ld-panel .col{display:flex;flex-direction:column;gap:9px;min-width:0}' +
+        '@container (max-width:600px){#niis-ld-panel .cols{grid-template-columns:minmax(0,1fr)}}' +
         '#niis-ld-panel .who{background:#f1f5f9;border:2px solid #e2e8f0;border-radius:10px;padding:8px 12px;transition:border-color .3s}' +
         '#niis-ld-panel .who .r1{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}' +
         '#niis-ld-panel .who .nm{font-size:24px;font-weight:800;color:#0f172a;letter-spacing:3px}' +
@@ -176,15 +179,20 @@
         '#niis-ld-panel .hist td{border-bottom:1px solid #e2e8f0;padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
         '#niis-ld-panel .hist tr.cov td:first-child{border-left:6px solid #ef4444}#niis-ld-panel .hist tr.flu td:first-child{border-left:6px solid #3b82f6}' +
         '#niis-ld-panel .hist tr.oth td:first-child{border-left:6px solid #cbd5e1}#niis-ld-panel .hist tr.cur td{background:#fef9c3;font-weight:700}' +
-        '#niis-ld-panel .clip{border:2px dashed #86efac;background:#f0fdf4;color:#166534;border-radius:10px;padding:6px 10px;font:inherit;font-size:14px;font-weight:800;text-align:left;cursor:pointer;transition:transform .1s}' +
-        '#niis-ld-panel .clip:active{transform:scale(.98)}#niis-ld-panel .clip.warn{border:2px solid #f59e0b;background:#fef3c7;color:#92400e}' +
-        '#niis-ld-panel .clip.need{border:2px solid #dc2626;background:#dc2626;color:#fff;font-size:16px;padding:9px 12px;animation:niisPulse 1.2s infinite}' +
-        '#niis-ld-panel .clip.done{border:2px solid #16a34a;background:#16a34a;color:#fff}' +
+        '#niis-ld-panel .cp{align-self:center;border:none;border-radius:999px;padding:1px 11px;font:inherit;font-size:13px;font-weight:800;cursor:pointer;background:#dcfce7;color:#166534;transition:transform .1s}' +
+        '#niis-ld-panel .cp:active{transform:scale(.94)}#niis-ld-panel .cp.warn{background:#fef3c7;color:#92400e}' +
+        '#niis-ld-panel .cp.need{background:#dc2626;color:#fff;font-size:14px;animation:niisPulse 1.2s infinite}#niis-ld-panel .cp.done{background:#16a34a;color:#fff}' +
+        '#niis-ld-panel .fc{background:#2563eb;color:#fff;border-radius:10px;padding:6px 12px;font-size:17px;font-weight:900}#niis-ld-panel .fc b{font-family:Consolas,monospace;letter-spacing:1px;margin-right:8px}' +
+        '#niis-ld-panel .codes{border:2px solid #fcd34d;background:#fffbeb;border-radius:10px;padding:6px 9px}' +
+        '#niis-ld-panel .codes .ch{font-weight:800;color:#92400e;font-size:13px;margin-bottom:3px}' +
+        '#niis-ld-panel .cg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px 8px}' +
+        '#niis-ld-panel .cg span{font-size:12.5px;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:4px;padding:0 3px}' +
+        '#niis-ld-panel .cg b{display:inline-block;min-width:54px;font-family:Consolas,monospace;color:#0f172a}#niis-ld-panel .cg span.hit{background:#2563eb;color:#fff;font-weight:800}#niis-ld-panel .cg span.hit b{color:#fff}' +
         '@keyframes niisPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.55)}50%{box-shadow:0 0 0 7px rgba(220,38,38,0)}}' +
         '#niis-ld-panel.flash .who{animation:niisFlash 2.5s ease-out}' +
         '@keyframes niisFlash{0%,40%{border-color:#f59e0b;background:#fef3c7;box-shadow:0 0 0 4px rgba(245,158,11,.35)}100%{border-color:#e2e8f0;background:#f1f5f9;box-shadow:none}}' +
         '#niis-ld-panel .err{color:#b91c1c;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:7px 10px;font-size:13px}' +
-        '#niis-ld-panel .ft{font-size:11px;color:#64748b;text-align:right;padding:4px 12px 8px}' +
+        '#niis-ld-panel .ft{font-size:11px;color:#94a3b8;text-align:right;padding:2px 12px 6px}' +
         '@media (prefers-reduced-motion:reduce){#niis-ld-panel *{animation:none!important}}';
 
     var pid = '';
@@ -248,25 +256,22 @@
     // 新冠與上一劑需間隔 84 天 → 卡片狀態 { cls, st, line }（查無紀錄只說「未查得」，不直接斷言可接種）
     var COV_GAP = 84;
     function covState(info) {
-        if (!info.last) return { cls: 'none', st: '◯ 未查得新冠紀錄', line: '' };
+        if (!info.last) return { cls: 'none', st: '◯ 無紀錄', line: '' };
         var n = daysAgo(info.last.date);
         var ok = new Date(info.last.date.getTime()); ok.setDate(ok.getDate() + COV_GAP);
-        if (n >= COV_GAP) return { cls: 'ok', st: '✅ 已滿 ' + COV_GAP + ' 天・可接種', line: '' };
+        if (n >= COV_GAP) return { cls: 'ok', st: '✅ 可接種', line: '' };
         // 最快可打＝滿 84 天後遇到的第一個星期四（當天就是週四則當天）
         var thu = new Date(ok.getTime());
         while (thu.getDay() !== 4) thu.setDate(thu.getDate() + 1);
         return {
-            cls: 'no', st: '⛔ 未滿 ' + COV_GAP + ' 天（還差 ' + (COV_GAP - n) + ' 天）',
-            line: '<div class="gap">最快可打：' + fmtRoc(thu) + '（四）<span class="gapsub">滿 ' + COV_GAP + ' 天為 ' + fmtRoc(ok) + '</span></div>'
+            cls: 'no', st: '⛔ 未滿 ' + COV_GAP + ' 天',
+            line: '<div class="gap">最快 ' + fmtRoc(thu) + '（四）</div>'
         };
     }
     function fluState(info) {
         var s = fluSeasonStart();
-        if (info.last && info.last.date >= s) return {
-            cls: 'no', st: '⛔ 本季已接種',
-            line: '<div class="gap">本季（' + (s.getFullYear() - 1911) + '/10/01 起）已打過，請勿重複掛號</div>'
-        };
-        return info.last ? { cls: 'ok', st: '✅ 本季未打過', line: '' } : { cls: 'none', st: '◯ 未查得流感紀錄', line: '' };
+        if (info.last && info.last.date >= s) return { cls: 'no', st: '⛔ 本季已接種', line: '' };
+        return info.last ? { cls: 'ok', st: '✅ 本季未打', line: '' } : { cls: 'none', st: '◯ 無紀錄', line: '' };
     }
     function cardHtml(fam, title, info, state) {
         var h = '<div class="card ' + fam + ' ' + state.cls + '"><div class="st">' + state.st + '</div>' +
@@ -280,9 +285,7 @@
         if (!recs.length) return '';
         var list = recs.slice().sort(function (a, b) { return b.date - a.date; }).slice(0, 6);
         var season = fluSeasonStart();
-        return '<div class="sub" style="font-weight:700;color:#475569">最近接種明細（共 ' + recs.length + ' 筆，列最近 ' + list.length + ' 筆）' +
-            '<span style="float:right;font-weight:400"><span style="color:#ef4444">■</span>新冠 <span style="color:#3b82f6">■</span>流感 <span style="background:#fef9c3">　</span>本季／84 天內</span></div>' +
-            '<table class="hist"><colgroup><col style="width:86px"><col style="width:33%"><col style="width:82px"><col></colgroup>' +
+        return '<table class="hist"><colgroup><col style="width:80px"><col style="width:33%"><col style="width:80px"><col></colgroup>' +
             '<tr><th>日期</th><th>疫苗</th><th>廠牌</th><th>接種單位</th></tr>' +
             list.map(function (r) {
                 var b = brandOf(r), cov = isCov(r.code), flu = isFlu(r.code);
@@ -363,19 +366,35 @@
     function onAnyFocus() { if (clipFail && pid) { clipFail = false; copyNow(false); } }
     function clipHtml() {
         if (!pid) return '';
-        if (doneId === pid && doneUntil > Date.now()) return '<button class="clip done" data-act="copyId">✅ 已複製・到掛號平台 Ctrl+V</button>';
-        if (clip.id === pid) {
-            var hm = new Date(clip.at), tm = ('0' + hm.getHours()).slice(-2) + ':' + ('0' + hm.getMinutes()).slice(-2);
-            return clip.marked
-                ? '<button class="clip" data-act="copyId" title="點一下可再複製一次">📋 已複製（' + tm + '）・到掛號平台 Ctrl+V</button>'
-                : '<button class="clip warn" data-act="copyId" title="點一下再試">⚠ 已複製純文字（' + tm + '）・無 NIIS 標記，平台無法比對</button>';
-        }
-        if (clipFail) return '<button class="clip need" data-act="copyId">📋 點我複製・自動複製沒成功</button>';
-        return '<button class="clip" data-act="copyId">📋 複製中…</button>';
+        if (doneId === pid && doneUntil > Date.now()) return '<button class="cp done" data-act="copyId">✅ 已複製</button>';
+        if (clip.id === pid) return '<button class="cp' + (clip.marked ? '' : ' warn') + '" data-act="copyId" title="再複製一次">📋 已複製</button>';
+        if (clipFail) return '<button class="cp need" data-act="copyId">📋 點我複製</button>';
+        return '<button class="cp" data-act="copyId">📋 …</button>';
     }
     function updateClip() {
         var el = panel && panel.querySelector('[data-role="clip"]');
         if (el) el.innerHTML = clipHtml();
+    }
+
+    var FCODES = [
+        ['F01', '6個月～學齡前'], ['F02A01', '國小'], ['F02A02', '國中'], ['F02A03', '高中職／五專1-3年'],
+        ['F02B', '幼兒園／托育人員'], ['F04A', '安養長照受照顧者'], ['F04B', '長照機構工作人員'],
+        ['F05A', '孕婦'], ['F05B', '6個月內嬰兒雙親'], ['F06A', '高風險慢性病'], ['F06B', '罕見疾病'],
+        ['F06C', '重大傷病'], ['F07A', '醫事人員'], ['F07B', '醫療院所非醫事'], ['F07C', '防疫人員'],
+        ['F07D', '禽畜／動物防疫'], ['F09', '擴大對象']
+    ];
+    // 依學年推年級：9/1 前滿 6 歲入國小（學年從 9/1 起算）→ 回傳對應代碼；6 個月～學齡前＝F01
+    function ageCode(birth, mon) {
+        if (!birth || mon < 6) return '';
+        var t = new Date(), cut = t.getMonth() >= 8 ? t.getFullYear() : t.getFullYear() - 1;
+        var a = cut - birth.getFullYear() - (birth.getMonth() > 8 || (birth.getMonth() === 8 && birth.getDate() > 1) ? 1 : 0);
+        var g = a - 5;
+        return g <= 0 ? 'F01' : g <= 6 ? 'F02A01' : g <= 9 ? 'F02A02' : g <= 12 ? 'F02A03' : '';
+    }
+    function codesHtml(hit) {
+        return '<div class="codes"><div class="ch">公費身分代碼</div><div class="cg">' + FCODES.map(function (c) {
+            return '<span' + (c[0] === hit ? ' class="hit"' : '') + ' title="' + esc(c[1]) + '"><b>' + c[0] + '</b>' + esc(c[1]) + '</span>';
+        }).join('') + '</div></div>';
     }
 
     var freshUntil = 0, freshTimer = null;
@@ -399,10 +418,9 @@
         var body = panel.querySelector('[data-role="body"]');
         if (!data.found) {
             pid = '';   // 頁面載入中／不是接種登錄頁 → 不複製任何人
-            body.innerHTML = '<div class="err">這一頁找不到接種紀錄表（需有「劑別代號」「接種日」欄）。請進入個案的「預防接種登錄」頁，面板會自動更新。' +
-                (/niis/i.test(location.host) ? '' : '<br>這個書籤要在 <b>NIIS</b> 頁面點；想在其他分頁也看到，請在 NIIS 的面板按「📌 浮動」。') + '</div>' +
-                '<div class="sub">診斷（不含個資，可截圖給開發者）：網址 ' + esc(host.location.host + host.location.pathname) + '｜框架 ' + diag.frames + ' 個（無法讀取 ' + diag.blocked + '）｜表格 ' + diag.tables + ' 個' +
-                (diag.heads.length ? '<br>疑似表頭：' + diag.heads.map(esc).join('<br>') : '｜未見含「劑別／接種」的表頭') + '</div>';
+            body.innerHTML = '<div class="err">請進入個案「預防接種登錄」頁</div>' +
+                '<div class="sub" style="font-size:11px">' + esc(host.location.host + host.location.pathname) + '｜框架 ' + diag.frames + '（' + diag.blocked + '）｜表格 ' + diag.tables +
+                (diag.heads.length ? '｜' + diag.heads.map(esc).join('｜') : '') + '</div>';
             return;
         }
         var name = readLabel(docs, /^姓名[:：]?$/);
@@ -412,25 +430,31 @@
             lastPid = pid;
             clipFail = false;
         }
-        var age = '', pubTag = '', pubWarn = '';
+        var age = '', pubTag = '', pubWarn = '', right = '', code = '';
         if (birth) {
             // 足歲到「月」：未滿當月生日的日子不算一個月
             var t = new Date(), mon = (t.getFullYear() - birth.getFullYear()) * 12 + (t.getMonth() - birth.getMonth());
             if (t.getDate() < birth.getDate()) mon--;
             age = '民國 ' + (birth.getFullYear() - 1911) + ' 年次・' + Math.floor(mon / 12) + ' 歲 ' + (mon % 12) + ' 個月';
             var lim = publicAgeLimit(), yrs = t.getFullYear() - birth.getFullYear();
+            code = ageCode(birth, mon);
             if (yrs >= lim) pubTag = '<span class="pub ok" title="依出生年計 ' + yrs + ' 歲">✓ 公費 ' + lim + '+</span>';
-            else pubWarn = '<div class="pub no">⚠ 未達公費年齡 ' + lim + ' 歲（依出生年計 ' + yrs + ' 歲），需確認其他公費身分' +
-                (lim > 50 && yrs >= 50 ? '；11/2 起 50 歲以上即符合' : '') + '</div>';
-        }
+            else {
+                if (!code) pubWarn = '<div class="pub no">⚠ 未達 ' + lim + ' 歲' + (lim > 50 && yrs >= 50 ? '（11/2 起符合）' : '') + '</div>';
+                right = codesHtml(code);
+            }
+        } else right = codesHtml('');
+        var school = /^F02A/.test(code) ? FCODES.filter(function (c) { return c[0] === code; })[0] : null;   // 國小～高中職：醒目提示身分別
         var cov = latest(data.recs, isCov), flu = latest(data.recs, isFlu);
-        body.innerHTML = '<div class="who' + (freshUntil > Date.now() ? ' fresh' : '') + '"><div class="r1">' + (name ? '<span class="nm">' + esc(name) + '</span>' : '') +
-            (pid ? '<span class="pid">' + esc(pid) + '</span>' : '<span class="pid" style="color:#b91c1c">證號讀不到</span>') + pubTag + '</div>' +
-            (age ? '<div class="age">' + esc(age) + '</div>' : '') + '</div>' + pubWarn +
+        right += histHtml(data.recs);
+        body.innerHTML = '<div class="cols' + (right ? '' : ' one') + '"><div class="col">' +
+            '<div class="who' + (freshUntil > Date.now() ? ' fresh' : '') + '"><div class="r1">' + (name ? '<span class="nm">' + esc(name) + '</span>' : '') +
+            (pid ? '<span class="pid">' + esc(pid) + '</span><span data-role="clip">' + clipHtml() + '</span>' : '<span class="pid" style="color:#b91c1c">證號讀不到</span>') + pubTag + '</div>' +
+            (age ? '<div class="age">' + esc(age) + '</div>' : '') + '</div>' +
+            (school ? '<div class="fc"><b>' + school[0] + '</b>' + esc(school[1]) + '</div>' : '') + pubWarn +
             cardHtml('cov', '🦠 新冠', cov, covState(cov)) +
             cardHtml('flu', '🤧 流感', flu, fluState(flu)) +
-            '<div data-role="clip" style="display:flex;flex-direction:column">' + clipHtml() + '</div>' +
-            histHtml(data.recs);
+            '</div>' + (right ? '<div class="col">' + right + '</div>' : '') + '</div>';
         autoCopy();
     }
 
@@ -448,11 +472,11 @@
     var pipWin = null, closing = false;
     var canPip = !!(window.documentPictureInPicture && window.documentPictureInPicture.requestWindow);
     function openPip() {
-        window.documentPictureInPicture.requestWindow({ width: 440, height: 560 }).then(function (w) {
+        window.documentPictureInPicture.requestWindow({ width: 720, height: 600 }).then(function (w) {
             pipWin = w;
             w.document.title = '最近接種';
             w.addEventListener('focus', onAnyFocus);
-            w.addEventListener('resize', fitPip);   // 浮動視窗拉大 → 字跟著放大
+            w.addEventListener('resize', fitPip);   // 視窗拉大 → 字跟著放大
             w.addEventListener('pagehide', function () {
                 pipWin = null;
                 if (closing) return;
@@ -463,7 +487,7 @@
             mountPanel();
         }, function (err) {
             var b = panel && panel.querySelector('[data-role="body"]');
-            if (b) b.insertAdjacentHTML('afterbegin', '<div class="err">浮動視窗開不起來（' + esc((err && err.message) || '瀏覽器不支援') + '）。請確認使用新版 Chrome／Edge。</div>');
+            if (b) b.insertAdjacentHTML('afterbegin', '<div class="err">無法鎖定最上層（' + esc((err && err.message) || '瀏覽器不支援') + '）</div>');
         });
     }
 
@@ -496,11 +520,11 @@
         panel = doc.createElement('div');
         panel.id = PANEL_ID;
         panel.innerHTML =
-            '<div class="qh"><b>💉 最近接種（新冠／流感）</b>' +
-            (canPip ? '<button class="hb" data-act="pip" title="' + (pipWin ? '收回到 NIIS 頁面' : '變成浮動視窗：切到掛號平台也持續顯示') + '">' + (pipWin ? '↙ 收回' : '📌 浮動') + '</button>' : '') +
-            '<button class="hb x" data-act="close" title="關閉（再點書籤也可關閉）">✕ 關閉</button></div>' +
+            '<div class="qh"><b>💉 最近接種</b>' +
+            (canPip ? '<button class="hb" data-act="pip">' + (pipWin ? '↙ 取消鎖定' : '📌 鎖定最上層') + '</button>' : '') +
+            '<button class="hb x" data-act="close">✕ 關閉</button></div>' +
             '<div class="qb" data-role="body"></div>' +
-            '<div class="ft">' + VERSION + '｜唯讀・換人自動複製身分證到剪貼簿・不保存</div>';
+            '<div class="ft">' + VERSION + '</div>';
         doc.body.appendChild(panel);
         panel.addEventListener('click', onPanelClick);
         if (!pipWin) {
@@ -517,7 +541,7 @@
         fitPip();
     }
     function fitPip() {
-        if (pipWin && panel) panel.style.zoom = Math.max(1, Math.min(1.8, pipWin.innerWidth / 440)).toFixed(2);
+        if (pipWin && panel) panel.style.zoom = Math.max(1, Math.min(1.6, pipWin.innerWidth / 720)).toFixed(2);
     }
 
     // 找 NIIS 內容頁、監看它的局部更新（換人但沒整頁重載時自動重讀）
